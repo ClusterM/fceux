@@ -1004,7 +1004,7 @@ int iNesSaveAs(const char* name)
 }
 
 //para edit: added function below
-char *iNesShortFName() {
+char *iNesShortFName(void) {
 	char *ret;
 
 	if (!(ret = strrchr(LoadedRomFName, '\\')))
