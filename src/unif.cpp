@@ -473,6 +473,7 @@ static BMAPPING bmap[] = {
 	{ "HPxx", BMCHPxx_Init, 0 },
 	{ "MINDKIDS", MINDKIDS_Init, BMCFLAG_256KCHRR },
 	{ "FNS", FNS_Init, BMCFLAG_16KCHRR },
+	{ "COOLGIRL", COOLGIRL_Init, 0 },
 
 	{ 0, 0, 0 }
 };
