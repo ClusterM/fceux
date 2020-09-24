@@ -1602,22 +1602,22 @@ static DECLFW(COOLGIRL_WRITE) {
 			}
 		}
 
-		// Mapper #32 - IREM G-101
+		// Mapper #32 - Irem's G-101
 		if (mapper == 0b011010)
 		{
-			switch (get_bits(A, "13:12"))
+			switch (get_bits(A, "14:12"))
 			{
-			case 0b00: // 2'b00: prg_bank_a[5:0] = cpu_data_in[5:0]; // PRG0
+			case 0b000: // 2'b00: prg_bank_a[5:0] = cpu_data_in[5:0]; // $8000-$8FFF, PRG0
 				SET_BITS(prg_bank_a, "5:0", V, "5:0");
 				break;
-			case 0b01: // 2'b01: {prg_mode[0], mirroring} = {cpu_data_in[1], 1'b0, cpu_data_in[0]}; // PRG mode, mirroring
+			case 0b001: // 2'b01: {prg_mode[0], mirroring} = {cpu_data_in[1], 1'b0, cpu_data_in[0]}; // $9000-$9FFF, PRG mode, mirroring
 				SET_BITS(prg_mode, "0", V, "1");
 				mirroring = V & 1;
 				break;
-			case 0b10: // 2'b10: prg_bank_b[5:0] = cpu_data_in[5:0]; // PRG1
+			case 0b010: // 2'b10: prg_bank_b[5:0] = cpu_data_in[5:0]; // $A000-$AFFF, PRG1
 				SET_BITS(prg_bank_b, "5:0", V, "5:0");
 				break;
-			case 0b11: // CHR regs
+			case 0b011: // $B000-$BFFF, CHR regs
 				switch (get_bits(A, "2:0"))
 				{
 				case 0b000: // 3'b000: chr_bank_a[7:0] = cpu_data_in[7:0];
@@ -1641,7 +1641,7 @@ static DECLFW(COOLGIRL_WRITE) {
 			}
 		}
 
-		// Mapper 036 is assigned to TXC's PCB 01-22000-400
+		// Mapper #36 is assigned to TXC's PCB 01-22000-400
 		if (mapper == 0b011101)
 		{
 			if (get_bits(A, "14:1") != 0b11111111111111) // (cpu_addr_in[14:1] != 14'b11111111111111)
@@ -1653,7 +1653,7 @@ static DECLFW(COOLGIRL_WRITE) {
 			}
 		}
 
-		// Mapper 070
+		// Mapper #70
 		if (mapper == 0b011110)
 		{
 			// prg_bank_a[4:1] = cpu_data_in[7:4];
@@ -1669,6 +1669,30 @@ static DECLFW(COOLGIRL_WRITE) {
 			SET_BITS(prg_bank_6000, "3:0", V, "4:1");
 			// map_rom_on_6000 = 1;
 			map_rom_on_6000 = 1;
+		}
+
+		// Mapper #75 - VRC1
+		if (mapper == 0b100010)
+		{
+			// case (cpu_addr_in[14:12])
+			switch (get_bits(A, "14:12"))
+			{
+			case 0b000: // 3'b000: prg_bank_a[3:0] = cpu_data_in[3:0]; // $8000-$8FFF
+				SET_BITS(prg_bank_a, "3:0", V, "3:0"); break;
+			case 0b001:
+				mirroring = V & 1; // mirroring = {1'b0, cpu_data_in[0]};
+				SET_BITS(chr_bank_a, "6", V, "1"); // chr_bank_a[6] = cpu_data_in[1];
+				SET_BITS(chr_bank_e, "6", V, "2"); // chr_bank_e[6] = cpu_data_in[2];
+				break;
+			case 0b010: // 3'b010: prg_bank_b[3:0] = cpu_data_in[3:0]; // $A000-$AFFF
+				SET_BITS(prg_bank_b, "3:0", V, "3:0"); break;
+			case 0b100: // 3'b100: prg_bank_c[3:0] = cpu_data_in[3:0]; // $C000-$CFFF
+				SET_BITS(prg_bank_c, "3:0", V, "3:0"); break;
+			case 0b110: // 3'b110: ñhr_bank_a[5:2] = cpu_data_in[3:0]; // $E000-$EFFF
+				SET_BITS(chr_bank_a, "5:2", V, "3:0"); break;
+			case 0b111: // 3'b111: chr_bank_e[5:2] = cpu_data_in[3:0]; // $F000-$FFFF
+				SET_BITS(chr_bank_e, "5:2", V, "3:0"); break;
+			}
 		}
 	}
 
