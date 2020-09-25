@@ -131,6 +131,8 @@ static uint16 vrc3_irq_latch = 0;				// [15:0], stores counter reload latch valu
 // for mapper #42 (only Baby Mario)
 static uint8 mapper42_irq_enabled = 0;			// register to enable/disable counter
 static uint16 mapper42_irq_value = 0;			// [14:0], counter itself (upcounting)
+// for mapper #90
+static uint8 mapper90_xor = 0;
 
 static uint8 flash_state = 0;
 static uint16 flash_buffer_a[10];
@@ -1012,12 +1014,13 @@ static DECLFW(COOLGIRL_WRITE) {
 				case 0b100:
 					break; // prescaler? who cares?
 				case 0b101:
-					// mmc3_irq_latch = cpu_data_in; // ^ mapper90_xor;
-					mmc3_irq_latch = V;
+					// mmc3_irq_latch = cpu_data_in ^ mapper90_xor;
+					mmc3_irq_latch = V ^ mapper90_xor;
 					mmc3_irq_reload = 1;
 					break;
 				case 0b110:
 					// mapper90_xor = cpu_data_in;
+					mapper90_xor = V;
 					break;
 				case 0b111:
 					break; // meh
@@ -2020,6 +2023,7 @@ static void COOLGIRL_Reset(void) {
 	vrc3_irq_latch = 0;
 	mapper42_irq_enabled = 0;
 	mapper42_irq_value = 0;
+	mapper90_xor = 0;
 	flash_state = 0;
 	//flash_buffer_a[10];
 	//flash_buffer_v[10];
@@ -2150,6 +2154,7 @@ void COOLGIRL_Init(CartInfo *info) {
 	ExState(vrc3_irq_latch, "V3IL");
 	ExState(mapper42_irq_enabled, "42IE");
 	ExState(mapper42_irq_value, "42IV");
+	ExState(mapper90_xor, "90XR");
 	ExState(flash_state, "FLST");
 	ExState(flash_buffer_a, "FLBA");
 	ExState(flash_buffer_v, "FLBV");
