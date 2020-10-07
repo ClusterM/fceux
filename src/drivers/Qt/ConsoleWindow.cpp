@@ -25,6 +25,7 @@
 #include "Qt/LuaControl.h"
 #include "Qt/CheatsConf.h"
 #include "Qt/HexEditor.h"
+#include "Qt/TraceLogger.h"
 #include "Qt/CodeDataLogger.h"
 #include "Qt/ConsoleDebugger.h"
 #include "Qt/ConsoleUtilities.h"
@@ -32,6 +33,8 @@
 #include "Qt/ConsoleVideoConf.h"
 #include "Qt/AboutWindow.h"
 #include "Qt/fceuWrapper.h"
+#include "Qt/ppuViewer.h"
+#include "Qt/NameTableViewer.h"
 #include "Qt/keyscan.h"
 #include "Qt/nes_shm.h"
 
@@ -499,6 +502,30 @@ void consoleWin_t::createMainMenu(void)
     connect(hexEditAct, SIGNAL(triggered()), this, SLOT(openHexEditor(void)) );
 
     debugMenu->addAction(hexEditAct);
+
+	 // Debug -> PPU Viewer
+	 ppuViewAct = new QAction(tr("PPU Viewer..."), this);
+    //ppuViewAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    ppuViewAct->setStatusTip(tr("Open PPU Viewer"));
+    connect(ppuViewAct, SIGNAL(triggered()), this, SLOT(openPPUViewer(void)) );
+
+    debugMenu->addAction(ppuViewAct);
+
+	 // Debug -> Name Table Viewer
+	 ntViewAct = new QAction(tr("Name Table Viewer..."), this);
+    //ntViewAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    ntViewAct->setStatusTip(tr("Open Name Table Viewer"));
+    connect(ntViewAct, SIGNAL(triggered()), this, SLOT(openNTViewer(void)) );
+
+    debugMenu->addAction(ntViewAct);
+
+	 // Debug -> Trace Logger
+	 traceLogAct = new QAction(tr("Trace Logger..."), this);
+    //traceLogAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    traceLogAct->setStatusTip(tr("Open Trace Logger"));
+    connect(traceLogAct, SIGNAL(triggered()), this, SLOT(openTraceLogger(void)) );
+
+    debugMenu->addAction(traceLogAct);
 
 	 // Debug -> Code/Data Logger
 	 codeDataLogAct = new QAction(tr("Code/Data Logger..."), this);
@@ -1012,6 +1039,20 @@ void consoleWin_t::openHexEditor(void)
    hexEditWin->show();
 }
 
+void consoleWin_t::openPPUViewer(void)
+{
+	//printf("Open GUI PPU Viewer Window\n");
+	
+	openPPUViewWindow(this);
+}
+
+void consoleWin_t::openNTViewer(void)
+{
+	//printf("Open GUI Name Table Viewer Window\n");
+	
+	openNameTableViewWindow(this);
+}
+
 void consoleWin_t::openCodeDataLogger(void)
 {
 	CodeDataLoggerDialog_t *cdlWin;
@@ -1021,6 +1062,11 @@ void consoleWin_t::openCodeDataLogger(void)
    cdlWin = new CodeDataLoggerDialog_t(this);
 	
    cdlWin->show();
+}
+
+void consoleWin_t::openTraceLogger(void)
+{
+	openTraceLoggerWindow(this);
 }
 
 void consoleWin_t::toggleAutoResume(void)

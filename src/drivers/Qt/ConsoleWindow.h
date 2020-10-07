@@ -91,7 +91,10 @@ class  consoleWin_t : public QMainWindow
 	 QAction *cheatsAct;
 	 QAction *debuggerAct;
 	 QAction *codeDataLogAct;
+	 QAction *traceLogAct;
 	 QAction *hexEditAct;
+	 QAction *ppuViewAct;
+	 QAction *ntViewAct;
 	 QAction *openMovAct;
 	 QAction *stopMovAct;
 	 QAction *recMovAct;
@@ -135,6 +138,7 @@ class  consoleWin_t : public QMainWindow
       void openPaletteConfWin(void);
       void openGuiConfWin(void);
 		void openCodeDataLogger(void);
+		void openTraceLogger(void);
       void toggleAutoResume(void);
       void toggleFullscreen(void);
       void updatePeriodic(void);
@@ -160,6 +164,8 @@ class  consoleWin_t : public QMainWindow
 		void fdsSwitchDisk(void);
 		void fdsEjectDisk(void);
 		void fdsLoadBiosFile(void);
+		void openPPUViewer(void);
+		void openNTViewer(void);
 		void openCheats(void);
 		void openMovie(void);
 		void stopMovie(void);
