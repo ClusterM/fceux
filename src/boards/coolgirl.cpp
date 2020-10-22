@@ -800,7 +800,7 @@ static DECLFW(COOLGIRL_WRITE) {
 		if (mapper == 0b000101)
 		{
 			// prg_bank_a[3:1] = { cpu_data_in[6:4] };
-			SET_BITS(prg_bank_a, "3:1", V, "6:3");
+			SET_BITS(prg_bank_a, "3:1", V, "6:4");
 			// chr_write_enabled = cpu_data_in[0];
 			can_write_chr = V & 1;
 		}
