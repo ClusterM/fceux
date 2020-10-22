@@ -153,6 +153,31 @@ class QAsmView : public QWidget
 		bool  registerNameEnable;
 };
 
+class DebuggerStackDisplay : public QPlainTextEdit
+{
+   Q_OBJECT
+
+	public:
+   DebuggerStackDisplay(QWidget *parent = 0);
+	~DebuggerStackDisplay(void);
+
+      void updateText(void);
+
+   protected:
+      void keyPressEvent(QKeyEvent *event);
+      void contextMenuEvent(QContextMenuEvent *event);
+
+      int  stackBytesPerLine;
+      bool showAddrs;
+
+	private slots:
+      void toggleShowAddr(void);
+      void sel1BytePerLine(void);
+      void sel2BytesPerLine(void);
+      void sel3BytesPerLine(void);
+      void sel4BytesPerLine(void);
+};
+
 class ConsoleDebugger : public QDialog
 {
    Q_OBJECT
@@ -181,7 +206,7 @@ class ConsoleDebugger : public QDialog
 		QScrollBar  *vbar;
 		QScrollBar  *hbar;
 		QAsmView    *asmView;
-		QPlainTextEdit *stackText;
+		DebuggerStackDisplay *stackText;
 		QLineEdit *seekEntry;
 		QLineEdit *pcEntry;
 		QLineEdit *regAEntry;

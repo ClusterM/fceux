@@ -9,6 +9,7 @@
 #include <QScreen>
 
 #include "Qt/nes_shm.h"
+#include "Qt/fceuWrapper.h"
 #include "Qt/ConsoleViewerGL.h"
 
 extern unsigned int gui_draw_area_width;
@@ -38,6 +39,16 @@ ConsoleViewGL_t::ConsoleViewGL_t(QWidget *parent)
 	{
 		memset( localBuf, 0, localBufSize );
 	}
+
+   linearFilter = false;
+
+   if ( g_config )
+   {
+      int opt;
+      g_config->getOption("SDL.OpenGLip", &opt );
+
+      linearFilter = (opt) ? true : false;
+   }
 }
 
 ConsoleViewGL_t::~ConsoleViewGL_t(void)
@@ -120,6 +131,16 @@ void ConsoleViewGL_t::resizeGL(int w, int h)
 	gui_draw_area_height = h;
 
 	buildTextures();
+}
+
+void ConsoleViewGL_t::setLinearFilterEnable( bool ena )
+{
+   if ( linearFilter != ena )
+   {
+      linearFilter = ena;
+
+	   buildTextures();
+   }
 }
 
 void ConsoleViewGL_t::transfer2LocalBuffer(void)

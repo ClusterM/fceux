@@ -81,7 +81,7 @@ else(WIN32)
   pkg_check_modules( SDL2 REQUIRED sdl2)
 
   if ( ${SDL2_FOUND} )
-	  add_definitions( ${SDL2_CFLAGS} )
+	  add_definitions( ${SDL2_CFLAGS} -D__SDL__ )
   endif()
 
   # Check for LUA
@@ -445,6 +445,8 @@ set(SRC_DRIVERS_SDL
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/fceuWrapper.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ppuViewer.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/NameTableViewer.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/RamWatch.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/RamSearch.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/config.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/input.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/nes_shm.cpp  

@@ -386,7 +386,7 @@ void TraceLoggerDialog_t::openLogFile(void)
 	dialog.setNameFilter(tr("LOG files (*.log *.LOG) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Open") );
 	dialog.setDefaultSuffix( tr(".log") );
 
@@ -658,6 +658,9 @@ int traceRecord_t::convToText( char *txt )
    int i=0, j=0;
    char stmp[128];
    char str_axystate[32], str_procstatus[32];
+
+	str_axystate[0] = 0;
+	str_procstatus[0] = 0;
 
    txt[0] = 0;
    if ( opSize == 0 )
@@ -1085,9 +1088,19 @@ void FCEUD_TraceInstruction(uint8 *opcode, int size)
 QTraceLogView::QTraceLogView(QWidget *parent)
 	: QWidget(parent)
 {
+   QPalette pal;
+	QColor fg("black"), bg("white");
+
 	font.setFamily("Courier New");
 	font.setStyle( QFont::StyleNormal );
 	font.setStyleHint( QFont::Monospace );
+
+   pal = this->palette();
+	pal.setColor(QPalette::Base      , bg );
+	pal.setColor(QPalette::Background, bg );
+	pal.setColor(QPalette::WindowText, fg );
+
+	this->setPalette(pal);
 
 	calcFontData();
 

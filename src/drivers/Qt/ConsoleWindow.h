@@ -89,6 +89,8 @@ class  consoleWin_t : public QMainWindow
 	 QAction *fdsEjectAct;
 	 QAction *fdsLoadBiosAct;
 	 QAction *cheatsAct;
+	 QAction *ramWatchAct;
+	 QAction *ramSearchAct;
 	 QAction *debuggerAct;
 	 QAction *codeDataLogAct;
 	 QAction *traceLogAct;
@@ -164,9 +166,18 @@ class  consoleWin_t : public QMainWindow
 		void fdsSwitchDisk(void);
 		void fdsEjectDisk(void);
 		void fdsLoadBiosFile(void);
+		void emuSpeedUp(void);
+		void emuSlowDown(void);
+		void emuSlowestSpd(void);
+		void emuNormalSpd(void);
+		void emuFastestSpd(void);
+		void emuCustomSpd(void);
+		void emuSetFrameAdvDelay(void);
 		void openPPUViewer(void);
 		void openNTViewer(void);
 		void openCheats(void);
+		void openRamWatch(void);
+		void openRamSearch(void);
 		void openMovie(void);
 		void stopMovie(void);
 		void recordMovie(void);

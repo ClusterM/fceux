@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 
 #include "../../fceu.h"
 #include "../../fds.h"
@@ -35,6 +36,8 @@
 #include "Qt/fceuWrapper.h"
 #include "Qt/ppuViewer.h"
 #include "Qt/NameTableViewer.h"
+#include "Qt/RamWatch.h"
+#include "Qt/RamSearch.h"
 #include "Qt/keyscan.h"
 #include "Qt/nes_shm.h"
 
@@ -112,6 +115,12 @@ consoleWin_t::~consoleWin_t(void)
 	// clear the NetworkIP field so this doesn't happen unintentionally
 	g_config->setOption ("SDL.NetworkIP", "");
 	g_config->save ();
+
+	if ( this == consoleWindow )
+	{
+		consoleWindow = NULL;
+	}
+
 }
 
 void consoleWin_t::setCyclePeriodms( int ms )
@@ -167,6 +176,7 @@ void consoleWin_t::keyReleaseEvent(QKeyEvent *event)
 //---------------------------------------------------------------------------
 void consoleWin_t::createMainMenu(void)
 {
+   QAction *act;
 	QMenu *subMenu;
 	QActionGroup *group;
 	int useNativeMenuBar;
@@ -471,6 +481,71 @@ void consoleWin_t::createMainMenu(void)
 
     subMenu->addAction(fdsLoadBiosAct);
 
+    emuMenu->addSeparator();
+
+    // Emulation -> Speed
+	 subMenu = emuMenu->addMenu(tr("Speed"));
+
+	 // Emulation -> Speed -> Speed Up
+	 act = new QAction(tr("Speed Up"), this);
+    act->setShortcut( QKeySequence(tr("=")));
+    act->setStatusTip(tr("Speed Up"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuSpeedUp(void)) );
+
+    subMenu->addAction(act);
+
+    // Emulation -> Speed -> Slow Down
+	 act = new QAction(tr("Slow Down"), this);
+    act->setShortcut( QKeySequence(tr("-")));
+    act->setStatusTip(tr("Slow Down"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuSlowDown(void)) );
+
+    subMenu->addAction(act);
+
+    subMenu->addSeparator();
+
+    // Emulation -> Speed -> Slowest Speed
+	 act = new QAction(tr("Slowest"), this);
+    //act->setShortcut( QKeySequence(tr("-")));
+    act->setStatusTip(tr("Slowest"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuSlowestSpd(void)) );
+
+    subMenu->addAction(act);
+
+    // Emulation -> Speed -> Normal Speed
+	 act = new QAction(tr("Normal"), this);
+    //act->setShortcut( QKeySequence(tr("-")));
+    act->setStatusTip(tr("Normal"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuNormalSpd(void)) );
+
+    subMenu->addAction(act);
+
+    // Emulation -> Speed -> Fastest Speed
+	 act = new QAction(tr("Turbo"), this);
+    //act->setShortcut( QKeySequence(tr("-")));
+    act->setStatusTip(tr("Turbo (Fastest)"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuFastestSpd(void)) );
+
+    subMenu->addAction(act);
+
+    // Emulation -> Speed -> Custom Speed
+	 act = new QAction(tr("Custom"), this);
+    //act->setShortcut( QKeySequence(tr("-")));
+    act->setStatusTip(tr("Custom"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuCustomSpd(void)) );
+
+    subMenu->addAction(act);
+
+    subMenu->addSeparator();
+
+    // Emulation -> Speed -> Set Frame Advance Delay
+	 act = new QAction(tr("Set Frame Advance Delay"), this);
+    //act->setShortcut( QKeySequence(tr("-")));
+    act->setStatusTip(tr("Set Frame Advance Delay"));
+    connect(act, SIGNAL(triggered()), this, SLOT(emuSetFrameAdvDelay(void)) );
+
+    subMenu->addAction(act);
+
 	 //-----------------------------------------------------------------------
 	 // Tools
     toolsMenu = menuBar()->addMenu(tr("Tools"));
@@ -482,6 +557,22 @@ void consoleWin_t::createMainMenu(void)
     connect(cheatsAct, SIGNAL(triggered()), this, SLOT(openCheats(void)) );
 
     toolsMenu->addAction(cheatsAct);
+
+	 // Tools -> RAM Search
+	 ramSearchAct = new QAction(tr("RAM Search..."), this);
+    //ramSearchAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    ramSearchAct->setStatusTip(tr("Open RAM Search Window"));
+    connect(ramSearchAct, SIGNAL(triggered()), this, SLOT(openRamSearch(void)) );
+
+    toolsMenu->addAction(ramSearchAct);
+
+	 // Tools -> RAM Watch
+	 ramWatchAct = new QAction(tr("RAM Watch..."), this);
+    //ramWatchAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    ramWatchAct->setStatusTip(tr("Open RAM Watch Window"));
+    connect(ramWatchAct, SIGNAL(triggered()), this, SLOT(openRamWatch(void)) );
+
+    toolsMenu->addAction(ramWatchAct);
 
 	 //-----------------------------------------------------------------------
 	 // Debug
@@ -626,7 +717,7 @@ void consoleWin_t::openROMFile(void)
 	dialog.setNameFilter(tr("NES files (*.nes *.NES) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Open") );
 
 	g_config->getOption ("SDL.LastOpenFile", &last );
@@ -690,7 +781,7 @@ void consoleWin_t::loadNSF(void)
 	dialog.setNameFilter(tr("NSF Sound Files (*.nsf *.NSF) ;; Zip Files (*.zip *.ZIP) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Load") );
 
 	g_config->getOption ("SDL.LastOpenNSF", &last );
@@ -744,7 +835,7 @@ void consoleWin_t::loadStateFrom(void)
 	dialog.setNameFilter(tr("FCS & SAV Files (*.sav *.SAV *.fc? *.FC?) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Load") );
 
 	g_config->getOption ("SDL.LastLoadStateFrom", &last );
@@ -798,7 +889,7 @@ void consoleWin_t::saveStateAs(void)
 	dialog.setNameFilter(tr("SAV Files (*.sav *.SAV) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Save") );
 	dialog.setDefaultSuffix( tr(".sav") );
 
@@ -1008,13 +1099,26 @@ void consoleWin_t::openGuiConfWin(void)
 
 void consoleWin_t::openCheats(void)
 {
-	GuiCheatsDialog_t *cheatWin;
-
 	//printf("Open GUI Cheat Window\n");
 	
-   cheatWin = new GuiCheatsDialog_t(this);
+   openCheatDialog(this);
+}
+
+void consoleWin_t::openRamWatch(void)
+{
+	RamWatchDialog_t *ramWatchWin;
+
+	//printf("Open GUI RAM Watch Window\n");
 	
-   cheatWin->show();
+   ramWatchWin = new RamWatchDialog_t(this);
+	
+   ramWatchWin->show();
+}
+
+void consoleWin_t::openRamSearch(void)
+{
+	//printf("Open GUI RAM Search Window\n");
+	openRamSearchWindow(this);
 }
 
 void consoleWin_t::openDebugWindow(void)
@@ -1148,7 +1252,7 @@ void consoleWin_t::loadGameGenieROM(void)
 	dialog.setNameFilter(tr("GG ROM File (gg.rom  *Genie*.nes) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Load") );
 
 	g_config->getOption ("SDL.LastOpenFile", &last );
@@ -1231,7 +1335,7 @@ void consoleWin_t::fdsLoadBiosFile(void)
 	dialog.setNameFilter(tr("ROM files (*.rom *.ROM) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Load") );
 
 	g_config->getOption ("SDL.LastOpenFile", &last );
@@ -1285,6 +1389,77 @@ void consoleWin_t::fdsLoadBiosFile(void)
    return;
 }
 
+void consoleWin_t::emuSpeedUp(void)
+{
+   IncreaseEmulationSpeed();
+}
+
+void consoleWin_t::emuSlowDown(void)
+{
+   DecreaseEmulationSpeed();
+}
+
+void consoleWin_t::emuSlowestSpd(void)
+{
+   FCEUD_SetEmulationSpeed( EMUSPEED_SLOWEST );
+}
+
+void consoleWin_t::emuNormalSpd(void)
+{
+   FCEUD_SetEmulationSpeed( EMUSPEED_NORMAL );
+}
+
+void consoleWin_t::emuFastestSpd(void)
+{
+   FCEUD_SetEmulationSpeed( EMUSPEED_FASTEST );
+}
+
+void consoleWin_t::emuCustomSpd(void)
+{
+	int ret;
+	QInputDialog dialog(this);
+
+   dialog.setWindowTitle( tr("Emulation Speed") );
+   dialog.setLabelText( tr("Enter a percentage from 1 to 1000.") );
+   dialog.setOkButtonText( tr("Ok") );
+   dialog.setInputMode( QInputDialog::IntInput );
+   dialog.setIntRange( 1, 1000 );
+   dialog.setIntValue( 100 );
+
+   dialog.show();
+   ret = dialog.exec();
+
+   if ( QDialog::Accepted == ret )
+   {
+      int spdPercent;
+
+      spdPercent = dialog.intValue();
+
+      CustomEmulationSpeed( spdPercent );
+   }
+}
+
+void consoleWin_t::emuSetFrameAdvDelay(void)
+{
+	int ret;
+	QInputDialog dialog(this);
+
+   dialog.setWindowTitle( tr("Frame Advance Delay") );
+   dialog.setLabelText( tr("How much time should elapse before holding the frame advance unpauses the simulation?") );
+   dialog.setOkButtonText( tr("Ok") );
+   dialog.setInputMode( QInputDialog::IntInput );
+   dialog.setIntRange( 0, 1000 );
+   dialog.setIntValue( frameAdvance_Delay );
+
+   dialog.show();
+   ret = dialog.exec();
+
+   if ( QDialog::Accepted == ret )
+   {
+      frameAdvance_Delay = dialog.intValue();
+   }
+}
+
 void consoleWin_t::openMovie(void)
 {
 	int ret, useNativeFileDialogVal;
@@ -1298,7 +1473,7 @@ void consoleWin_t::openMovie(void)
 	dialog.setNameFilter(tr("FM2 Movies (*.fm2) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Open") );
 
 	g_config->getOption ("SDL.LastOpenFile", &last );
@@ -1383,7 +1558,7 @@ void consoleWin_t::recordMovieAs(void)
 	dialog.setNameFilter(tr("FM2 Movies (*.fm2) ;; All files (*)"));
 
 	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::Hidden );
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
 	dialog.setLabelText( QFileDialog::Accept, tr("Save") );
 
 	g_config->getOption ("SDL.LastOpenFile", &last );

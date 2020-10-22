@@ -64,6 +64,7 @@ static int periodic_saves = 0;
 static int   mutexLocks = 0;
 static int   mutexPending = 0;
 static bool  emulatorHasMutux = 0;
+static unsigned int emulatorCycleCount = 0;
 
 extern double g_fpsScale;
 
@@ -206,12 +207,22 @@ DriverKill()
 }
 
 /**
+ * Reloads last game
+ */
+int reloadLastGame(void)
+{
+	std::string lastRom;
+	g_config->getOption(std::string("SDL.LastOpenFile"), &lastRom);
+	return LoadGame(lastRom.c_str(), false);
+}
+
+/**
  * Loads a game, given a full path/filename.  The driver code must be
  * initialized after the game is loaded, because the emulator code
  * provides data necessary for the driver code(number of scanlines to
  * render, what virtual input devices to use, etc.).
  */
-int LoadGame(const char *path)
+int LoadGame(const char *path, bool silent)
 {
 	int gg_enabled, autoLoadDebug, autoOpenDebugger;
 
@@ -226,7 +237,7 @@ int LoadGame(const char *path)
 
 	FCEUI_SetGameGenie (gg_enabled);
 
-	if(!FCEUI_LoadGame(path, 1)) {
+	if(!FCEUI_LoadGame(path, 1, silent)) {
 		return 0;
 	}
 
@@ -945,6 +956,8 @@ static void DoFun(int frameskip, int periodic_saves)
 	//	opause=FCEUI_EmulationPaused();
 	//	SilenceSound(opause);
 	//}
+	
+	emulatorCycleCount++;
 }
 
 void fceuWrapperLock(void)
@@ -1019,7 +1032,7 @@ int  fceuWrapperUpdate( void )
 	}
 	emulatorHasMutux = 1;
  
-	if ( GameInfo && !FCEUI_EmulationPaused() )
+	if ( GameInfo /*&& !FCEUI_EmulationPaused()*/ )
 	{
 		DoFun(frameskip, periodic_saves);
 	
