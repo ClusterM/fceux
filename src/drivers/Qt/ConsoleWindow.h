@@ -4,6 +4,9 @@
 #ifndef __GameAppH__
 #define __GameAppH__
 
+#include <vector>
+#include <string>
+
 #include <QApplication>
 #include <QMainWindow>
 #include <QWidget>
@@ -47,6 +50,8 @@ class  consoleWin_t : public QMainWindow
 		QMutex *mutex;
 
 	 	void QueueErrorMsgWindow( const char *msg );
+
+		int  showListSelectDialog( const char *title, std::vector <std::string> &l );
 
 	protected:
 	 QMenu *fileMenu;
@@ -97,6 +102,7 @@ class  consoleWin_t : public QMainWindow
 	 QAction *hexEditAct;
 	 QAction *ppuViewAct;
 	 QAction *ntViewAct;
+	 QAction *iNesEditAct;
 	 QAction *openMovAct;
 	 QAction *stopMovAct;
 	 QAction *recMovAct;
@@ -175,6 +181,7 @@ class  consoleWin_t : public QMainWindow
 		void emuSetFrameAdvDelay(void);
 		void openPPUViewer(void);
 		void openNTViewer(void);
+		void openNesHeaderEditor(void);
 		void openCheats(void);
 		void openRamWatch(void);
 		void openRamSearch(void);

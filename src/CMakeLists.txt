@@ -440,6 +440,7 @@ set(SRC_DRIVERS_SDL
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleUtilities.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleVideoConf.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleSoundConf.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/iNesHeaderEditor.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/TraceLogger.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/AboutWindow.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/fceuWrapper.cpp  
@@ -515,19 +516,24 @@ install( TARGETS  ${APP_NAME}
 	BUNDLE  DESTINATION  . COMPONENT Runtime 
 	RUNTIME  DESTINATION  bin COMPONENT Runtime )
 
-set( APPS  ${CMAKE_INSTALL_PREFIX}/${APP_NAME}.app)
-set( DIRS  ${CMAKE_BINARY_DIR} /usr/local/lib)
-
-message(STATUS APPS: ${APPS})
-message(STATUS DIRS: ${DIRS} )
+# Use \$ to defer expansion until install script is called; CPack will call it with its own CMAKE_INSTALL_PREFIX
+set(APP \${CMAKE_INSTALL_PREFIX}/${APP_NAME}.app)
 
 set(CPACK_PACKAGE_ICON ${CMAKE_SOURCE_DIR}/fceux.icns )
-set(CPACK_BUNDLE_ICON ${CMAKE_SOURCE_DIR}/fceux.icns )
 set(CPACK_GENERATOR "DRAGNDROP")
 include(CPACK)
 
-install( CODE "include(BundleUtilities) 
-	fixup_bundle( \"${APPS}\" \"\" \"${DIRS}\") "
+# macdeployqt tool that comes with Qt: https://doc.qt.io/qt-5/macos-deployment.html#macdeploy
+# Compared to fixup_bundle, correctly finds and installs Qt-specific resources as well as non-Qt dependencies
+find_program(MACDEPLOYQT macdeployqt)
+if(NOT MACDEPLOYQT)
+	message(FATAL_ERROR "Could not find macdeployqt executable")
+endif()
+
+install( CODE "
+	message(STATUS \"Deploying and fixing up dependencies in app: ${APP}\")
+	execute_process(COMMAND \"${MACDEPLOYQT}\" \"${APP}\" -verbose=1)
+		"
 	COMPONENT Runtime
 	)
 
@@ -538,7 +544,7 @@ install( TARGETS  ${APP_NAME}
 
 install( FILES     ${CMAKE_CURRENT_SOURCE_DIR}/auxlib.lua                DESTINATION share/fceux/luaScripts  )
 install( DIRECTORY ${CMAKE_SOURCE_DIR}/output/.                          DESTINATION share/fceux  )
-install( FILES     ${CMAKE_SOURCE_DIR}/fceux.png                         DESTINATION share/pixmaps  )
+install( FILES     ${CMAKE_SOURCE_DIR}/fceux1.png                        DESTINATION share/pixmaps  )
 install( FILES     ${CMAKE_SOURCE_DIR}/fceux.desktop                     DESTINATION share/applications  )
 install( FILES     ${CMAKE_SOURCE_DIR}/documentation/fceux.6             DESTINATION share/man/man6  )
 install( FILES     ${CMAKE_SOURCE_DIR}/documentation/fceux-net-server.6  DESTINATION share/man/man6  )

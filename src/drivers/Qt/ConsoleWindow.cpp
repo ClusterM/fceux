@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
+#include <QHeaderView>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QInputDialog>
@@ -36,6 +37,7 @@
 #include "Qt/fceuWrapper.h"
 #include "Qt/ppuViewer.h"
 #include "Qt/NameTableViewer.h"
+#include "Qt/iNesHeaderEditor.h"
 #include "Qt/RamWatch.h"
 #include "Qt/RamSearch.h"
 #include "Qt/keyscan.h"
@@ -45,6 +47,17 @@ consoleWin_t::consoleWin_t(QWidget *parent)
 	: QMainWindow( parent )
 {
 	int use_SDL_video = false;
+   int setFullScreen = false;
+
+	this->resize( 512, 512 );
+
+	g_config->getOption( "SDL.Fullscreen", &setFullScreen );
+	g_config->setOption( "SDL.Fullscreen", 0 ); // Reset full screen config parameter to false so it is never saved this way
+
+	if ( setFullScreen )
+	{
+		this->showFullScreen();
+	}
 
 	createMainMenu();
 
@@ -626,6 +639,14 @@ void consoleWin_t::createMainMenu(void)
 
     debugMenu->addAction(codeDataLogAct);
 
+	 // Debug -> iNES Header Editor
+	 iNesEditAct = new QAction(tr("iNES Header Editor..."), this);
+    //iNesEditAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    iNesEditAct->setStatusTip(tr("Open iNES Header Editor"));
+    connect(iNesEditAct, SIGNAL(triggered()), this, SLOT(openNesHeaderEditor(void)) );
+
+    debugMenu->addAction(iNesEditAct);
+
 	 //-----------------------------------------------------------------------
 	 // Movie
     movieMenu = menuBar()->addMenu(tr("Movie"));
@@ -703,6 +724,82 @@ void consoleWin_t::closeApp(void)
 	qApp->quit();
 }
 //---------------------------------------------------------------------------
+int  consoleWin_t::showListSelectDialog( const char *title, std::vector <std::string> &l )
+{
+	if ( QThread::currentThread() == emulatorThread )
+	{
+		printf("Cannot display list selection dialog from within emulation thread...\n");
+		return 0;
+	}
+	int ret, idx = 0;
+	QDialog dialog(this);
+	QVBoxLayout *mainLayout;
+	QHBoxLayout *hbox;
+	QPushButton *okButton, *cancelButton;
+	QTreeWidget *tree;
+	QTreeWidgetItem *item;
+
+	dialog.setWindowTitle( tr(title) );
+
+	tree = new QTreeWidget();
+
+	tree->setColumnCount(1);
+
+	item = new QTreeWidgetItem();
+	item->setText( 0, QString::fromStdString( "File" ) );
+	item->setTextAlignment( 0, Qt::AlignLeft);
+
+	tree->setHeaderItem( item );
+
+	tree->header()->setSectionResizeMode( QHeaderView::ResizeToContents );
+
+	for (size_t i=0; i<l.size(); i++)
+	{
+		item = new QTreeWidgetItem();
+
+		item->setText( 0, QString::fromStdString( l[i] ) );
+
+		item->setTextAlignment( 0, Qt::AlignLeft);
+
+		tree->addTopLevelItem( item );
+	}
+
+	mainLayout = new QVBoxLayout();
+
+	hbox         = new QHBoxLayout();
+	okButton     = new QPushButton( tr("OK") );
+	cancelButton = new QPushButton( tr("Cancel") );
+
+	mainLayout->addWidget( tree );
+	mainLayout->addLayout( hbox );
+	hbox->addWidget( cancelButton );
+	hbox->addWidget(     okButton );
+
+	connect(     okButton, SIGNAL(clicked(void)), &dialog, SLOT(accept(void)) );
+	connect( cancelButton, SIGNAL(clicked(void)), &dialog, SLOT(reject(void)) );
+
+	dialog.setLayout( mainLayout );
+
+	ret = dialog.exec();
+
+	if ( ret == QDialog::Accepted )
+	{
+		idx = 0;
+
+		item = tree->currentItem();
+
+	   if ( item != NULL )
+	   {
+			idx = tree->indexOfTopLevelItem(item);
+		}
+	}
+	else
+	{
+		idx = -1;
+	}
+	return idx;
+}
+//---------------------------------------------------------------------------
 
 void consoleWin_t::openROMFile(void)
 {
@@ -712,9 +809,18 @@ void consoleWin_t::openROMFile(void)
 	char dir[512];
 	QFileDialog  dialog(this, tr("Open ROM File") );
 
+	const QStringList filters(
+			{ "All Useable files (*.nes *.NES *.nsf *.NSF *.fds *.FDS *.unf *.UNF *.unif *.UNIF *.zip *.ZIP)",
+           "NES files (*.nes *.NES)",
+           "NSF files (*.nsf *.NSF)",
+           "UNF files (*.unf *.UNF *.unif *.UNIF)",
+           "FDS files (*.fds *.FDS)",
+           "Any files (*)"
+         });
+
 	dialog.setFileMode(QFileDialog::ExistingFile);
 
-	dialog.setNameFilter(tr("NES files (*.nes *.NES) ;; All files (*)"));
+	dialog.setNameFilters( filters );
 
 	dialog.setViewMode(QFileDialog::List);
 	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
@@ -1166,6 +1272,24 @@ void consoleWin_t::openCodeDataLogger(void)
    cdlWin = new CodeDataLoggerDialog_t(this);
 	
    cdlWin->show();
+}
+
+void consoleWin_t::openNesHeaderEditor(void)
+{
+	iNesHeaderEditor_t *win;
+
+	//printf("Open iNES Header Editor Window\n");
+	
+   win = new iNesHeaderEditor_t(this);
+	
+	if ( win->isInitialized() )
+	{
+		win->show();
+	}
+	else
+	{
+		delete win;
+	}
 }
 
 void consoleWin_t::openTraceLogger(void)

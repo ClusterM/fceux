@@ -30,7 +30,7 @@ static char loadedcdfile[512] = {0};
 static int getDefaultCDLFile( char *filepath );
 //----------------------------------------------------
 CodeDataLoggerDialog_t::CodeDataLoggerDialog_t(QWidget *parent)
-	: QDialog( parent )
+	: QDialog( parent, Qt::Window )
 {
 	QVBoxLayout *mainLayout, *vbox1, *vbox;
 	QHBoxLayout *hbox;
@@ -623,7 +623,14 @@ static int getDefaultCDLFile( char *filepath )
 
 	parseFilepath( romFile, dir, baseFile );
 	
-	sprintf( filepath, "%s/%s.cdl", dir, baseFile );
+	if ( dir[0] == 0 )
+	{
+		sprintf( filepath, "%s.cdl", baseFile );
+	}
+	else
+	{
+		sprintf( filepath, "%s/%s.cdl", dir, baseFile );
+	}
 
 	//printf("%s\n", filepath );
 
@@ -827,7 +834,7 @@ void SaveCDLogFile(void)
 	FP = fopen(loadedcdfile, "wb");
 	if (FP == NULL)
 	{
-		FCEUD_PrintError("Error Saving File");
+		FCEUD_PrintError("Error Saving CDL File");
 		return;
 	}
 	fwrite(cdloggerdata, cdloggerdataSize, 1, FP);
