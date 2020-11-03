@@ -731,6 +731,7 @@ BMAPPINGLocal bmap[] = {
 	{"KONAMI QTAi Board",	547, QTAi_Init },
 
 	{"COOLGIRL",			3913, COOLGIRL_Init },
+	{"WARFACE",				3914, WARFACE_Init },
 
 	{"",					0, NULL}
 };

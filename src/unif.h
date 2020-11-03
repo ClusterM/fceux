@@ -161,6 +161,7 @@ void BMCHPxx_Init(CartInfo *info);
 void MINDKIDS_Init(CartInfo *info);
 void FNS_Init(CartInfo *info);
 void COOLGIRL_Init(CartInfo * info);
+void WARFACE_Init(CartInfo *info);
 
 extern uint8 *UNIFchrrama;	// Meh.  So I can stop CHR RAM
 							// bank switcherooing with certain boards...

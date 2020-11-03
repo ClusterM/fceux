@@ -495,6 +495,7 @@
     <ClCompile Include="..\src\boards\vrc6.cpp" />
     <ClCompile Include="..\src\boards\vrc7.cpp" />
     <ClCompile Include="..\src\boards\vrc7p.cpp" />
+    <ClCompile Include="..\src\boards\warface.cpp" />
     <ClCompile Include="..\src\boards\yoko.cpp" />
     <ClCompile Include="..\src\boards\__dummy_mapper.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
