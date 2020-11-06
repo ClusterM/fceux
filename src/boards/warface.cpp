@@ -22,6 +22,7 @@
 
 static uint8 prg_bank = 0;
 static uint8 chr_bank = 0;
+static uint16 timer = 0;
 
 static void WARFACE_Sync(void) {
 	setprg16(0x8000, prg_bank);
@@ -29,11 +30,11 @@ static void WARFACE_Sync(void) {
 
 	if (chr_bank & 0x80)
 	{
-		if (scanline < 64)
+		if (scanline < 63 || scanline > 240)
 			setchr4(0x0000, (chr_bank & 0x1C) | 0);
-		else if (scanline < 128)
+		else if (scanline < 127)
 			setchr4(0x0000, (chr_bank & 0x1C) | 1);
-		else if (scanline < 192)
+		else if (scanline < 191)
 			setchr4(0x0000, (chr_bank & 0x1C) | 2);
 		else
 			setchr4(0x0000, (chr_bank & 0x1C) | 3);
@@ -48,6 +49,8 @@ static DECLFW(WARFACE_WRITE) {
 	if ((A & 1) == 0)
 	{
 		prg_bank = V;
+		if (V & 0x80) timer = 4095;
+		X6502_IRQEnd(FCEU_IQEXT);
 	}
 	else {
 		chr_bank = V;
@@ -60,6 +63,17 @@ static void WARFACE_ScanlineCounter(void) {
 	WARFACE_Sync();
 }
 
+static void WARFACE_CpuCounter(int a) {
+	while (a--)
+	{
+		if (timer > 0)
+		{
+			timer--;
+			if (!timer) X6502_IRQBegin(FCEU_IQEXT);
+		}
+	}
+}
+
 static void WARFACE_Reset(void) {	
 	WARFACE_Sync();
 }
@@ -68,6 +82,7 @@ static void WARFACE_Power(void) {
 	SetReadHandler(0x8000, 0xFFFF, CartBR);
 	SetWriteHandler(0x6000, 0x7FFF, WARFACE_WRITE);
 	GameHBIRQHook = WARFACE_ScanlineCounter;
+	MapIRQHook = WARFACE_CpuCounter;
 	WARFACE_Reset();
 }
 
