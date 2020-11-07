@@ -865,7 +865,7 @@ void iNesHeaderEditor_t::setHeaderData(iNES_HEADER* header)
 	int mapper = header->ROM_type >> 4 | header->ROM_type2 & 0xF0;
 	if (ines20)
 	{
-		mapper |= (header->ROM_type3 & 0xF0) << 4;
+		mapper |= (header->ROM_type3 & 0x0F) << 8;
 	}
 	mapperComboBox->setCurrentIndex( mapper );
 
@@ -1334,12 +1334,9 @@ bool iNesHeaderEditor_t::WriteHeaderData(iNES_HEADER* header)
 
 	if (mapper < 4096)
 	{
-		if (mapper < 256)
-		{
-			_header.ROM_type |= (mapper & 0xF) << 4;
-			_header.ROM_type2 |= (mapper & 0xF0);
-		} 
-		else
+		_header.ROM_type |= (mapper & 0xF) << 4;
+		_header.ROM_type2 |= (mapper & 0xF0);
+		if (mapper >= 256)
 		{
 			if (ines20)
 			{
