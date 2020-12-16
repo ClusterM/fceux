@@ -198,6 +198,12 @@ fceuDecIntValidtor::fceuDecIntValidtor( int min, int max, QObject *parent)
 	this->max = max;
 }
 //---------------------------------------------------------------------------
+void fceuDecIntValidtor::setMinMax( int min, int max)
+{
+	this->min = min;
+	this->max = max;
+}
+//---------------------------------------------------------------------------
 QValidator::State fceuDecIntValidtor::validate(QString &input, int &pos) const
 {
    int i, v;
@@ -235,6 +241,74 @@ QValidator::State fceuDecIntValidtor::validate(QString &input, int &pos) const
       if ( s[i] == 0 )
       {
 			v = strtol( s.c_str(), NULL, 0 );
+
+			if ( v < min )
+			{
+   			return QValidator::Invalid;
+			}
+			else if ( v > max )
+			{
+   			return QValidator::Invalid;
+			}
+         return QValidator::Acceptable;
+      }
+   }
+   return QValidator::Invalid;
+}
+//---------------------------------------------------------------------------
+// FCEU Data Entry Custom Validators
+//---------------------------------------------------------------------------
+fceuHexIntValidtor::fceuHexIntValidtor( int min, int max, QObject *parent)
+     : QValidator(parent)
+{
+	this->min = min;
+	this->max = max;
+}
+//---------------------------------------------------------------------------
+void fceuHexIntValidtor::setMinMax( int min, int max)
+{
+	this->min = min;
+	this->max = max;
+}
+//---------------------------------------------------------------------------
+QValidator::State fceuHexIntValidtor::validate(QString &input, int &pos) const
+{
+   int i, v;
+   //printf("Validate: %i '%s'\n", input.size(), input.toStdString().c_str() );
+
+   if ( input.size() == 0 )
+   {
+      return QValidator::Acceptable;
+   }
+	input = input.toUpper();
+   std::string s = input.toStdString();
+   i=0;
+
+   if (s[i] == '-')
+	{
+		if ( min >= 0 )
+		{
+   		return QValidator::Invalid;
+		}
+		i++;
+	}
+	else if ( s[i] == '+' )
+   {
+      i++;
+   }
+
+   if ( s[i] == 0 )
+   {
+      return QValidator::Acceptable;
+   }
+
+   if ( isxdigit(s[i]) )
+   {
+      while ( isxdigit(s[i]) ) i++;
+
+      if ( s[i] == 0 )
+      {
+			v = strtol( s.c_str(), NULL, 16 );
 
 			if ( v < min )
 			{

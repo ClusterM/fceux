@@ -19,6 +19,9 @@ ConsoleVideoConfDialog_t::ConsoleVideoConfDialog_t(QWidget *parent)
 	QHBoxLayout *hbox1;
 	QLabel *lbl;
 	QPushButton *button;
+	QStyle *style;
+
+	style = this->style();
 
 	setWindowTitle( tr("Video Config") );
 
@@ -36,6 +39,29 @@ ConsoleVideoConfDialog_t::ConsoleVideoConfDialog_t(QWidget *parent)
 
 	hbox1->addWidget( lbl );
 	hbox1->addWidget( driverSelect );
+
+	main_vbox->addLayout( hbox1 );
+
+	// Video Driver Select
+	lbl = new QLabel( tr("Scaler:") );
+
+	scalerSelect = new QComboBox();
+
+	scalerSelect->addItem( tr("None"), 0 );
+	scalerSelect->addItem( tr("hq2x"), 1 );
+	scalerSelect->addItem( tr("scale2x"), 2 );
+	scalerSelect->addItem( tr("NTSC 2x"), 3 );
+	scalerSelect->addItem( tr("hq3x"), 4 );
+	scalerSelect->addItem( tr("scale3x"), 5 );
+	scalerSelect->addItem( tr("Prescale 2x"), 6 );
+	scalerSelect->addItem( tr("Prescale 3x"), 7 );
+	scalerSelect->addItem( tr("Prescale 4x"), 8 );
+	scalerSelect->addItem( tr("PAL"), 9 );
+	
+	hbox1 = new QHBoxLayout();
+
+	hbox1->addWidget( lbl );
+	hbox1->addWidget( scalerSelect );
 
 	main_vbox->addLayout( hbox1 );
 
@@ -59,9 +85,11 @@ ConsoleVideoConfDialog_t::ConsoleVideoConfDialog_t(QWidget *parent)
 
 	setComboBoxFromProperty( regionSelect, "SDL.PAL");
 	setComboBoxFromProperty( driverSelect, "SDL.VideoDriver");
+	setComboBoxFromProperty( scalerSelect, "SDL.SpecialFilter");
 
 	connect(regionSelect, SIGNAL(currentIndexChanged(int)), this, SLOT(regionChanged(int)) );
 	connect(driverSelect, SIGNAL(currentIndexChanged(int)), this, SLOT(driverChanged(int)) );
+	connect(scalerSelect, SIGNAL(currentIndexChanged(int)), this, SLOT(scalerChanged(int)) );
 
 	hbox1 = new QHBoxLayout();
 
@@ -180,9 +208,11 @@ ConsoleVideoConfDialog_t::ConsoleVideoConfDialog_t(QWidget *parent)
 	button = new QPushButton( tr("Apply") );
 	hbox1->addWidget( button );
 	connect(button, SIGNAL(clicked()), this, SLOT(applyChanges(void)) );
+	button->setIcon( style->standardIcon( QStyle::SP_DialogApplyButton ) );
 
 	button = new QPushButton( tr("Close") );
 	hbox1->addWidget( button );
+	button->setIcon( style->standardIcon( QStyle::SP_DialogCloseButton ) );
 	connect(button, SIGNAL(clicked()), this, SLOT(closeWindow(void)) );
 
 	main_vbox->addLayout( hbox1 );
@@ -214,8 +244,10 @@ void ConsoleVideoConfDialog_t::closeWindow(void)
 //----------------------------------------------------
 void  ConsoleVideoConfDialog_t::resetVideo(void)
 {
+	fceuWrapperLock();
 	KillVideo ();
 	InitVideo (GameInfo);
+	fceuWrapperUnLock();
 }
 //----------------------------------------------------
 void  ConsoleVideoConfDialog_t::setCheckBoxFromProperty( QCheckBox *cbx, const char *property )
@@ -348,6 +380,18 @@ void ConsoleVideoConfDialog_t::driverChanged(int index)
 	printf("Note: A restart of the application is needed for video driver change to take effect...\n");
 }
 //----------------------------------------------------
+void ConsoleVideoConfDialog_t::scalerChanged(int index)
+{
+	int scaler;
+	//printf("Scaler: %i : %i \n", index, scalerSelect->itemData(index).toInt() );
+
+	scaler = scalerSelect->itemData(index).toInt();
+
+	g_config->setOption ("SDL.SpecialFilter", scaler);
+
+	g_config->save ();
+}
+//----------------------------------------------------
 void ConsoleVideoConfDialog_t::regionChanged(int index)
 {
 	int region;
@@ -373,8 +417,8 @@ QSize ConsoleVideoConfDialog_t::calcNewScreenSize(void)
 	{
 		QSize w, v;
 		double xscale, yscale;
-		int texture_width  = nes_shm->ncol;
-		int texture_height = nes_shm->nrow;
+		int texture_width  = nes_shm->video.ncol;
+		int texture_height = nes_shm->video.nrow;
 		int l=0, r=texture_width;
 		int t=0, b=texture_height;
 		int dw=0, dh=0, rw, rh;
@@ -395,7 +439,9 @@ QSize ConsoleVideoConfDialog_t::calcNewScreenSize(void)
 
 		if ( sqrPixCbx->isChecked() )
 		{
-			yscale = xscale = xScaleBox->value();
+			xscale = xScaleBox->value();
+
+			yscale = xscale * (double)nes_shm->video.xyRatio;
 		}
 		else
 		{

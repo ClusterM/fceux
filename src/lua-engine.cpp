@@ -57,6 +57,7 @@ extern TASEDITOR_LUA taseditor_lua;
 #else
 int LoadGame(const char *path, bool silent = false);
 int reloadLastGame(void);
+void fceuWrapperRequestAppExit(void);
 #endif
 
 #endif
@@ -194,6 +195,10 @@ void TaseditorDisableManualFunctionIfNeeded();
 #else
 int LuaKillMessageBox(void);
 #ifdef __linux__
+
+#ifndef __THROWNL
+#define __THROWNL throw () // Build fix Alpine Linux libc
+#endif
 int LuaPrintfToWindowConsole(const char *__restrict format, ...) 
                   __THROWNL __attribute__ ((__format__ (__printf__, 1, 2)));
 #else
@@ -305,6 +310,8 @@ CTASSERT(sizeof(luaMemHookTypeStrings)/sizeof(*luaMemHookTypeStrings) ==  LUAMEM
 
 static char* rawToCString(lua_State* L, int idx=0);
 static const char* toCString(lua_State* L, int idx=0);
+
+static int exitScheduled = FALSE;
 
 /**
  * Resets emulator speed / pause states after script exit.
@@ -645,6 +652,13 @@ static int emu_loadrom(lua_State *L)
 	return 0;
 }
 
+// emu.exit()
+//
+// Closes the fceux
+static int emu_exit(lua_State *L) {
+	exitScheduled = TRUE;
+	return 0;
+}
 
 static int emu_registerbefore(lua_State *L) {
 	if (!lua_isnil(L,1))
@@ -5891,6 +5905,7 @@ static const struct luaL_reg emulib [] = {
 	{"getdir", emu_getdir},
 	{"loadrom", emu_loadrom},
 	{"print", print}, // sure, why not
+	{"exit", emu_exit}, // useful for run-and-close scripts
 	{NULL,NULL}
 };
 
@@ -6191,6 +6206,17 @@ void FCEU_LuaFrameBoundary()
 		FCEU_LuaOnStop();
 	}
 
+#if defined(__linux) || defined(__APPLE__)
+	if (exitScheduled)
+	{  // This function does not exit immediately, 
+		// it requests for the application to exit when next convenient.
+		fceuWrapperRequestAppExit();
+		exitScheduled = FALSE;
+	}
+#else
+	if (exitScheduled)
+		DoFCEUExit();
+#endif
 }
 
 /**

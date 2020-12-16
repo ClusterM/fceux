@@ -1,5 +1,14 @@
 // GameApp.cpp
 //
+#ifdef __linux__
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
+#include <pthread.h>
+#endif
+
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
@@ -20,13 +29,18 @@
 #include "Qt/dface.h"
 #include "Qt/input.h"
 #include "Qt/ConsoleWindow.h"
+#include "Qt/InputConf.h"
 #include "Qt/GamePadConf.h"
 #include "Qt/HotKeyConf.h"
 #include "Qt/PaletteConf.h"
 #include "Qt/GuiConf.h"
+#include "Qt/MoviePlay.h"
 #include "Qt/MovieOptions.h"
+#include "Qt/TimingConf.h"
+#include "Qt/FrameTimingStats.h"
 #include "Qt/LuaControl.h"
 #include "Qt/CheatsConf.h"
+#include "Qt/GameGenie.h"
 #include "Qt/HexEditor.h"
 #include "Qt/TraceLogger.h"
 #include "Qt/CodeDataLogger.h"
@@ -34,6 +48,7 @@
 #include "Qt/ConsoleUtilities.h"
 #include "Qt/ConsoleSoundConf.h"
 #include "Qt/ConsoleVideoConf.h"
+#include "Qt/MsgLogViewer.h"
 #include "Qt/AboutWindow.h"
 #include "Qt/fceuWrapper.h"
 #include "Qt/ppuViewer.h"
@@ -47,6 +62,7 @@
 consoleWin_t::consoleWin_t(QWidget *parent)
 	: QMainWindow( parent )
 {
+	int opt;
 	int use_SDL_video = false;
    int setFullScreen = false;
 
@@ -64,9 +80,10 @@ consoleWin_t::consoleWin_t(QWidget *parent)
 
 	g_config->getOption( "SDL.VideoDriver", &use_SDL_video );
 
-	errorMsgValid = false;
-	viewport_GL  = NULL;
-	viewport_SDL = NULL;
+	closeRequested = false;
+	errorMsgValid  = false;
+	viewport_GL    = NULL;
+	viewport_SDL   = NULL;
 
 	if ( use_SDL_video )
 	{
@@ -92,15 +109,30 @@ consoleWin_t::consoleWin_t(QWidget *parent)
 	connect( gameTimer, &QTimer::timeout, this, &consoleWin_t::updatePeriodic );
 
 	gameTimer->setTimerType( Qt::PreciseTimer );
-	//gameTimer->start( 16 ); // 60hz
 	gameTimer->start( 8 ); // 120hz
 
 	emulatorThread->start();
 
+	g_config->getOption( "SDL.SetSchedParam", &opt );
+
+	if ( opt )
+	{
+		int policy, prio, nice;
+
+		g_config->getOption( "SDL.GuiSchedPolicy", &policy );
+		g_config->getOption( "SDL.GuiSchedPrioRt", &prio   );
+		g_config->getOption( "SDL.GuiSchedNice"  , &nice   );
+
+		setNicePriority( nice );
+
+		setSchedParam( policy, prio );
+	}
 }
 
 consoleWin_t::~consoleWin_t(void)
 {
+	QClipboard *clipboard;
+
 	nes_shm->runEmulator = 0;
 
 	gameTimer->stop(); 
@@ -129,6 +161,18 @@ consoleWin_t::~consoleWin_t(void)
 	// clear the NetworkIP field so this doesn't happen unintentionally
 	g_config->setOption ("SDL.NetworkIP", "");
 	g_config->save ();
+
+	// Clear Clipboard Contents on Program Exit
+	clipboard = QGuiApplication::clipboard();
+
+	if ( clipboard->ownsClipboard() )
+	{
+		clipboard->clear( QClipboard::Clipboard );
+	}
+	if ( clipboard->ownsSelection() )
+	{
+		clipboard->clear( QClipboard::Selection );
+	}
 
 	if ( this == consoleWindow )
 	{
@@ -175,6 +219,11 @@ void consoleWin_t::closeEvent(QCloseEvent *event)
 	closeApp();
 }
 
+void consoleWin_t::requestClose(void)
+{
+	closeRequested = true;
+}
+
 void consoleWin_t::keyPressEvent(QKeyEvent *event)
 {
    //printf("Key Press: 0x%x \n", event->key() );
@@ -194,6 +243,9 @@ void consoleWin_t::createMainMenu(void)
 	QMenu *subMenu;
 	QActionGroup *group;
 	int useNativeMenuBar;
+	QStyle *style;
+
+	style = this->style();
 
    // This is needed for menu bar to show up on MacOS
 	g_config->getOption( "SDL.UseNativeMenuBar", &useNativeMenuBar );
@@ -208,6 +260,9 @@ void consoleWin_t::createMainMenu(void)
 	 openROM = new QAction(tr("Open ROM"), this);
     openROM->setShortcuts(QKeySequence::Open);
     openROM->setStatusTip(tr("Open ROM File"));
+    //openROM->setIcon( QIcon(":icons/rom.png") );
+    //openROM->setIcon( style->standardIcon( QStyle::SP_FileIcon ) );
+    openROM->setIcon( style->standardIcon( QStyle::SP_FileDialogStart ) );
     connect(openROM, SIGNAL(triggered()), this, SLOT(openROMFile(void)) );
 
     fileMenu->addAction(openROM);
@@ -216,6 +271,7 @@ void consoleWin_t::createMainMenu(void)
 	 closeROM = new QAction(tr("Close ROM"), this);
     closeROM->setShortcut( QKeySequence(tr("Ctrl+C")));
     closeROM->setStatusTip(tr("Close Loaded ROM"));
+    closeROM->setIcon( style->standardIcon( QStyle::SP_BrowserStop ) );
     connect(closeROM, SIGNAL(triggered()), this, SLOT(closeROMCB(void)) );
 
     fileMenu->addAction(closeROM);
@@ -236,6 +292,7 @@ void consoleWin_t::createMainMenu(void)
 	 loadStateAct = new QAction(tr("Load State From"), this);
     //loadStateAct->setShortcut( QKeySequence(tr("Ctrl+N")));
     loadStateAct->setStatusTip(tr("Load State From"));
+    loadStateAct->setIcon( style->standardIcon( QStyle::SP_FileDialogStart ) );
     connect(loadStateAct, SIGNAL(triggered()), this, SLOT(loadStateFrom(void)) );
 
     fileMenu->addAction(loadStateAct);
@@ -244,6 +301,7 @@ void consoleWin_t::createMainMenu(void)
 	 saveStateAct = new QAction(tr("Save State As"), this);
     //loadStateAct->setShortcut( QKeySequence(tr("Ctrl+N")));
     saveStateAct->setStatusTip(tr("Save State As"));
+    saveStateAct->setIcon( style->standardIcon( QStyle::SP_DialogSaveButton ) );
     connect(saveStateAct, SIGNAL(triggered()), this, SLOT(saveStateAs(void)) );
 
     fileMenu->addAction(saveStateAct);
@@ -302,6 +360,7 @@ void consoleWin_t::createMainMenu(void)
 	 loadLuaAct = new QAction(tr("Load Lua Script"), this);
     //loadLuaAct->setShortcut( QKeySequence(tr("F5")));
     loadLuaAct->setStatusTip(tr("Load Lua Script"));
+    //loadLuaAct->setIcon( QIcon(":icons/lua-logo.png") );
     connect(loadLuaAct, SIGNAL(triggered()), this, SLOT(loadLua(void)) );
 
     fileMenu->addAction(loadLuaAct);
@@ -315,6 +374,7 @@ void consoleWin_t::createMainMenu(void)
 	 scrShotAct = new QAction(tr("Screenshot"), this);
     scrShotAct->setShortcut( QKeySequence(tr("F12")));
     scrShotAct->setStatusTip(tr("Screenshot"));
+    scrShotAct->setIcon( QIcon(":icons/camera.png") );
     connect(scrShotAct, SIGNAL(triggered()), this, SLOT(takeScreenShot()));
 
     fileMenu->addAction(scrShotAct);
@@ -323,6 +383,8 @@ void consoleWin_t::createMainMenu(void)
 	 quitAct = new QAction(tr("Quit"), this);
     quitAct->setShortcut( QKeySequence(tr("Ctrl+Q")));
     quitAct->setStatusTip(tr("Quit the Application"));
+    //quitAct->setIcon( style->standardIcon( QStyle::SP_DialogCloseButton ) );
+    quitAct->setIcon( QIcon(":icons/application-exit.png") );
     connect(quitAct, SIGNAL(triggered()), this, SLOT(closeApp()));
 
     fileMenu->addAction(quitAct);
@@ -331,10 +393,20 @@ void consoleWin_t::createMainMenu(void)
 	 // Options
     optMenu = menuBar()->addMenu(tr("Options"));
 
+	 // Options -> Input Config
+	 inputConfig = new QAction(tr("Input Config"), this);
+    //inputConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
+    inputConfig->setStatusTip(tr("Input Configure"));
+    inputConfig->setIcon( QIcon(":icons/input-gaming.png") );
+    connect(inputConfig, SIGNAL(triggered()), this, SLOT(openInputConfWin(void)) );
+
+    optMenu->addAction(inputConfig);
+
 	 // Options -> GamePad Config
 	 gamePadConfig = new QAction(tr("GamePad Config"), this);
     //gamePadConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     gamePadConfig->setStatusTip(tr("GamePad Configure"));
+    gamePadConfig->setIcon( QIcon(":icons/input-gaming-symbolic.png") );
     connect(gamePadConfig, SIGNAL(triggered()), this, SLOT(openGamePadConfWin(void)) );
 
     optMenu->addAction(gamePadConfig);
@@ -343,6 +415,7 @@ void consoleWin_t::createMainMenu(void)
 	 gameSoundConfig = new QAction(tr("Sound Config"), this);
     //gameSoundConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     gameSoundConfig->setStatusTip(tr("Sound Configure"));
+    gameSoundConfig->setIcon( style->standardIcon( QStyle::SP_MediaVolume ) );
     connect(gameSoundConfig, SIGNAL(triggered()), this, SLOT(openGameSndConfWin(void)) );
 
     optMenu->addAction(gameSoundConfig);
@@ -351,6 +424,7 @@ void consoleWin_t::createMainMenu(void)
 	 gameVideoConfig = new QAction(tr("Video Config"), this);
     //gameVideoConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     gameVideoConfig->setStatusTip(tr("Video Preferences"));
+    gameVideoConfig->setIcon( style->standardIcon( QStyle::SP_ComputerIcon ) );
     connect(gameVideoConfig, SIGNAL(triggered()), this, SLOT(openGameVideoConfWin(void)) );
 
     optMenu->addAction(gameVideoConfig);
@@ -359,6 +433,7 @@ void consoleWin_t::createMainMenu(void)
 	 hotkeyConfig = new QAction(tr("Hotkey Config"), this);
     //hotkeyConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     hotkeyConfig->setStatusTip(tr("Hotkey Configure"));
+    hotkeyConfig->setIcon( QIcon(":icons/input-keyboard.png") );
     connect(hotkeyConfig, SIGNAL(triggered()), this, SLOT(openHotkeyConfWin(void)) );
 
     optMenu->addAction(hotkeyConfig);
@@ -367,6 +442,7 @@ void consoleWin_t::createMainMenu(void)
 	 paletteConfig = new QAction(tr("Palette Config"), this);
     //paletteConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     paletteConfig->setStatusTip(tr("Palette Configure"));
+    paletteConfig->setIcon( QIcon(":icons/graphics-palette.png") );
     connect(paletteConfig, SIGNAL(triggered()), this, SLOT(openPaletteConfWin(void)) );
 
     optMenu->addAction(paletteConfig);
@@ -375,14 +451,25 @@ void consoleWin_t::createMainMenu(void)
 	 guiConfig = new QAction(tr("GUI Config"), this);
     //guiConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     guiConfig->setStatusTip(tr("GUI Configure"));
+    guiConfig->setIcon( style->standardIcon( QStyle::SP_TitleBarNormalButton ) );
     connect(guiConfig, SIGNAL(triggered()), this, SLOT(openGuiConfWin(void)) );
 
     optMenu->addAction(guiConfig);
+
+	 // Options -> Timing Config
+	 timingConfig = new QAction(tr("Timing Config"), this);
+    //timingConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
+    timingConfig->setStatusTip(tr("Timing Configure"));
+    timingConfig->setIcon( QIcon(":icons/timer.png") );
+    connect(timingConfig, SIGNAL(triggered()), this, SLOT(openTimingConfWin(void)) );
+
+    optMenu->addAction(timingConfig);
 
 	 // Options -> Movie Options
 	 movieConfig = new QAction(tr("Movie Options"), this);
     //movieConfig->setShortcut( QKeySequence(tr("Ctrl+C")));
     movieConfig->setStatusTip(tr("Movie Options"));
+    movieConfig->setIcon( QIcon(":icons/movie.png") );
     connect(movieConfig, SIGNAL(triggered()), this, SLOT(openMovieOptWin(void)) );
 
     optMenu->addAction(movieConfig);
@@ -401,8 +488,9 @@ void consoleWin_t::createMainMenu(void)
 	 // Options -> Full Screen
 	 fullscreen = new QAction(tr("Fullscreen"), this);
     fullscreen->setShortcut( QKeySequence(tr("Alt+Return")));
-    //fullscreen->setCheckable(true);
     fullscreen->setStatusTip(tr("Fullscreen"));
+    //fullscreen->setIcon( style->standardIcon( QStyle::SP_TitleBarMaxButton ) );
+    fullscreen->setIcon( QIcon(":icons/view-fullscreen.png") );
     connect(fullscreen, SIGNAL(triggered()), this, SLOT(toggleFullscreen(void)) );
 
     optMenu->addAction(fullscreen);
@@ -415,6 +503,7 @@ void consoleWin_t::createMainMenu(void)
 	 powerAct = new QAction(tr("Power"), this);
     //powerAct->setShortcut( QKeySequence(tr("Ctrl+P")));
     powerAct->setStatusTip(tr("Power On Console"));
+    powerAct->setIcon( QIcon(":icons/power.png") );
     connect(powerAct, SIGNAL(triggered()), this, SLOT(powerConsoleCB(void)) );
 
     emuMenu->addAction(powerAct);
@@ -423,6 +512,7 @@ void consoleWin_t::createMainMenu(void)
 	 resetAct = new QAction(tr("Reset"), this);
     //resetAct->setShortcut( QKeySequence(tr("Ctrl+R")));
     resetAct->setStatusTip(tr("Reset Console"));
+    resetAct->setIcon( style->standardIcon( QStyle::SP_DialogResetButton ) );
     connect(resetAct, SIGNAL(triggered()), this, SLOT(consoleHardReset(void)) );
 
     emuMenu->addAction(resetAct);
@@ -431,6 +521,7 @@ void consoleWin_t::createMainMenu(void)
 	 sresetAct = new QAction(tr("Soft Reset"), this);
     //sresetAct->setShortcut( QKeySequence(tr("Ctrl+R")));
     sresetAct->setStatusTip(tr("Soft Reset of Console"));
+    sresetAct->setIcon( style->standardIcon( QStyle::SP_BrowserReload ) );
     connect(sresetAct, SIGNAL(triggered()), this, SLOT(consoleSoftReset(void)) );
 
     emuMenu->addAction(sresetAct);
@@ -439,6 +530,7 @@ void consoleWin_t::createMainMenu(void)
 	 pauseAct = new QAction(tr("Pause"), this);
     pauseAct->setShortcut( QKeySequence(tr("Pause")));
     pauseAct->setStatusTip(tr("Pause Console"));
+    pauseAct->setIcon( style->standardIcon( QStyle::SP_MediaPause ) );
     connect(pauseAct, SIGNAL(triggered()), this, SLOT(consolePause(void)) );
 
     emuMenu->addAction(pauseAct);
@@ -512,6 +604,7 @@ void consoleWin_t::createMainMenu(void)
 	 act = new QAction(tr("Speed Up"), this);
     act->setShortcut( QKeySequence(tr("=")));
     act->setStatusTip(tr("Speed Up"));
+    act->setIcon( style->standardIcon( QStyle::SP_MediaSeekForward ) );
     connect(act, SIGNAL(triggered()), this, SLOT(emuSpeedUp(void)) );
 
     subMenu->addAction(act);
@@ -520,6 +613,7 @@ void consoleWin_t::createMainMenu(void)
 	 act = new QAction(tr("Slow Down"), this);
     act->setShortcut( QKeySequence(tr("-")));
     act->setStatusTip(tr("Slow Down"));
+    act->setIcon( style->standardIcon( QStyle::SP_MediaSeekBackward ) );
     connect(act, SIGNAL(triggered()), this, SLOT(emuSlowDown(void)) );
 
     subMenu->addAction(act);
@@ -530,6 +624,7 @@ void consoleWin_t::createMainMenu(void)
 	 act = new QAction(tr("Slowest"), this);
     //act->setShortcut( QKeySequence(tr("-")));
     act->setStatusTip(tr("Slowest"));
+    act->setIcon( style->standardIcon( QStyle::SP_MediaSkipBackward ) );
     connect(act, SIGNAL(triggered()), this, SLOT(emuSlowestSpd(void)) );
 
     subMenu->addAction(act);
@@ -538,6 +633,7 @@ void consoleWin_t::createMainMenu(void)
 	 act = new QAction(tr("Normal"), this);
     //act->setShortcut( QKeySequence(tr("-")));
     act->setStatusTip(tr("Normal"));
+    act->setIcon( style->standardIcon( QStyle::SP_MediaPlay ) );
     connect(act, SIGNAL(triggered()), this, SLOT(emuNormalSpd(void)) );
 
     subMenu->addAction(act);
@@ -546,6 +642,7 @@ void consoleWin_t::createMainMenu(void)
 	 act = new QAction(tr("Turbo"), this);
     //act->setShortcut( QKeySequence(tr("-")));
     act->setStatusTip(tr("Turbo (Fastest)"));
+    act->setIcon( style->standardIcon( QStyle::SP_MediaSkipForward ) );
     connect(act, SIGNAL(triggered()), this, SLOT(emuFastestSpd(void)) );
 
     subMenu->addAction(act);
@@ -595,6 +692,14 @@ void consoleWin_t::createMainMenu(void)
     connect(ramWatchAct, SIGNAL(triggered()), this, SLOT(openRamWatch(void)) );
 
     toolsMenu->addAction(ramWatchAct);
+
+	// Tools -> Frame Timing
+	act = new QAction(tr("Frame Timing ..."), this);
+	//act->setShortcut( QKeySequence(tr("Shift+F7")));
+	act->setStatusTip(tr("Open Frame Timing Window"));
+	connect(act, SIGNAL(triggered()), this, SLOT(openTimingStatWin(void)) );
+
+	toolsMenu->addAction(act);
 
 	 //-----------------------------------------------------------------------
 	 // Debug
@@ -648,6 +753,14 @@ void consoleWin_t::createMainMenu(void)
 
     debugMenu->addAction(codeDataLogAct);
 
+	 // Debug -> Game Genie Encode/Decode Viewer
+	 ggEncodeAct = new QAction(tr("Game Genie Encode/Decode"), this);
+    //ggEncodeAct->setShortcut( QKeySequence(tr("Shift+F7")));
+    ggEncodeAct->setStatusTip(tr("Open Game Genie Encode/Decode"));
+    connect(ggEncodeAct, SIGNAL(triggered()), this, SLOT(openGGEncoder(void)) );
+
+    debugMenu->addAction(ggEncodeAct);
+
 	 // Debug -> iNES Header Editor
 	 iNesEditAct = new QAction(tr("iNES Header Editor..."), this);
     //iNesEditAct->setShortcut( QKeySequence(tr("Shift+F7")));
@@ -660,10 +773,11 @@ void consoleWin_t::createMainMenu(void)
 	 // Movie
     movieMenu = menuBar()->addMenu(tr("Movie"));
 
-	 // Movie -> Open
-	 openMovAct = new QAction(tr("Open"), this);
+	 // Movie -> Play
+	 openMovAct = new QAction(tr("Play"), this);
     openMovAct->setShortcut( QKeySequence(tr("Shift+F7")));
-    openMovAct->setStatusTip(tr("Open Movie File"));
+    openMovAct->setStatusTip(tr("Play Movie File"));
+    openMovAct->setIcon( style->standardIcon( QStyle::SP_MediaPlay ) );
     connect(openMovAct, SIGNAL(triggered()), this, SLOT(openMovie(void)) );
 
     movieMenu->addAction(openMovAct);
@@ -672,6 +786,7 @@ void consoleWin_t::createMainMenu(void)
 	 stopMovAct = new QAction(tr("Stop"), this);
     //stopMovAct->setShortcut( QKeySequence(tr("Shift+F7")));
     stopMovAct->setStatusTip(tr("Stop Movie Recording"));
+    stopMovAct->setIcon( style->standardIcon( QStyle::SP_MediaStop ) );
     connect(stopMovAct, SIGNAL(triggered()), this, SLOT(stopMovie(void)) );
 
     movieMenu->addAction(stopMovAct);
@@ -682,6 +797,7 @@ void consoleWin_t::createMainMenu(void)
 	 recMovAct = new QAction(tr("Record"), this);
     recMovAct->setShortcut( QKeySequence(tr("Shift+F5")));
     recMovAct->setStatusTip(tr("Record Movie"));
+    recMovAct->setIcon( QIcon(":icons/media-record.png") );
     connect(recMovAct, SIGNAL(triggered()), this, SLOT(recordMovie(void)) );
 
     movieMenu->addAction(recMovAct);
@@ -701,6 +817,7 @@ void consoleWin_t::createMainMenu(void)
 	 // Help -> About FCEUX
 	 aboutAct = new QAction(tr("About FCEUX"), this);
     aboutAct->setStatusTip(tr("About FCEUX"));
+    aboutAct->setIcon( style->standardIcon( QStyle::SP_MessageBoxInformation ) );
     connect(aboutAct, SIGNAL(triggered()), this, SLOT(aboutFCEUX(void)) );
 
     helpMenu->addAction(aboutAct);
@@ -708,9 +825,18 @@ void consoleWin_t::createMainMenu(void)
 	 // Help -> About Qt
 	 aboutActQt = new QAction(tr("About Qt"), this);
     aboutActQt->setStatusTip(tr("About Qt"));
+    aboutActQt->setIcon( style->standardIcon( QStyle::SP_TitleBarMenuButton ) );
     connect(aboutActQt, SIGNAL(triggered()), this, SLOT(aboutQt(void)) );
 
     helpMenu->addAction(aboutActQt);
+
+	 // Help -> Message Log
+	 msgLogAct = new QAction(tr("Message Log"), this);
+    msgLogAct->setStatusTip(tr("Message Log"));
+    msgLogAct->setIcon( style->standardIcon( QStyle::SP_MessageBoxWarning ) );
+    connect(msgLogAct, SIGNAL(triggered()), this, SLOT(openMsgLogWin(void)) );
+
+    helpMenu->addAction(msgLogAct);
 };
 //---------------------------------------------------------------------------
 void consoleWin_t::closeApp(void)
@@ -1150,6 +1276,13 @@ void consoleWin_t::loadLua(void)
 #endif
 }
 
+void consoleWin_t::openInputConfWin(void)
+{
+	//printf("Open Input Config Window\n");
+	
+	openInputConfWindow(this);
+}
+
 void consoleWin_t::openGamePadConfWin(void)
 {
 	//printf("Open GamePad Config Window\n");
@@ -1210,6 +1343,28 @@ void consoleWin_t::openGuiConfWin(void)
    guiConfWin = new GuiConfDialog_t(this);
 	
    guiConfWin->show();
+}
+
+void consoleWin_t::openTimingConfWin(void)
+{
+	TimingConfDialog_t *tmConfWin;
+
+	//printf("Open Timing Config Window\n");
+	
+   tmConfWin = new TimingConfDialog_t(this);
+	
+   tmConfWin->show();
+}
+
+void consoleWin_t::openTimingStatWin(void)
+{
+	FrameTimingDialog_t *tmStatWin;
+
+	//printf("Open Timing Statistics Window\n");
+	
+   tmStatWin = new FrameTimingDialog_t(this);
+	
+   tmStatWin->show();
 }
 
 void consoleWin_t::openMovieOptWin(void)
@@ -1292,6 +1447,17 @@ void consoleWin_t::openCodeDataLogger(void)
    cdlWin = new CodeDataLoggerDialog_t(this);
 	
    cdlWin->show();
+}
+
+void consoleWin_t::openGGEncoder(void)
+{
+	GameGenieDialog_t *win;
+
+	//printf("Open Game Genie Window\n");
+	
+   win = new GameGenieDialog_t(this);
+	
+   win->show();
 }
 
 void consoleWin_t::openNesHeaderEditor(void)
@@ -1606,77 +1772,11 @@ void consoleWin_t::emuSetFrameAdvDelay(void)
 
 void consoleWin_t::openMovie(void)
 {
-	int ret, useNativeFileDialogVal;
-	QString filename;
-	std::string last;
-	char dir[512];
-	char replayReadOnlySetting;
-	QFileDialog  dialog(this, tr("Open FM2 Movie") );
+	MoviePlayDialog_t *win;
 
-	dialog.setFileMode(QFileDialog::ExistingFile);
+	win = new MoviePlayDialog_t(this);
 
-	dialog.setNameFilter(tr("FM2 Movies (*.fm2) ;; All files (*)"));
-
-	dialog.setViewMode(QFileDialog::List);
-	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
-	dialog.setLabelText( QFileDialog::Accept, tr("Open") );
-
-	g_config->getOption ("SDL.LastOpenMovie", &last );
-
-	getDirFromFile( last.c_str(), dir );
-
-	dialog.setDirectory( tr(dir) );
-
-	// Check config option to use native file dialog or not
-	g_config->getOption ("SDL.UseNativeFileDialog", &useNativeFileDialogVal);
-
-	dialog.setOption(QFileDialog::DontUseNativeDialog, !useNativeFileDialogVal);
-
-	dialog.show();
-	ret = dialog.exec();
-
-	if ( ret )
-	{
-		QStringList fileList;
-		fileList = dialog.selectedFiles();
-
-		if ( fileList.size() > 0 )
-		{
-			filename = fileList[0];
-		}
-	}
-
-   if ( filename.isNull() )
-   {
-      return;
-   }
-	qDebug() << "selected file path : " << filename.toUtf8();
-
-	int pauseframe;
-	g_config->getOption ("SDL.PauseFrame", &pauseframe);
-	g_config->setOption ("SDL.PauseFrame", 0);
-
-	FCEUI_printf ("Playing back movie located at %s\n", filename.toStdString().c_str() );
-
-	if (suggestReadOnlyReplay)
-	{
-		replayReadOnlySetting = true;
-	}
-	else
-	{
-		replayReadOnlySetting = FCEUI_GetMovieToggleReadOnly();
-	}
-
-	fceuWrapperLock();
-	if (FCEUI_LoadMovie( filename.toStdString().c_str(),
-		    replayReadOnlySetting, pauseframe ? pauseframe : false) == false)
-	{
-		printf("Error: Could not open movie file: %s \n", filename.toStdString().c_str() );
-	}
-	g_config->setOption ("SDL.LastOpenMovie", filename.toStdString().c_str() );
-	fceuWrapperUnLock();
-
-   return;
+	win->show();
 }
 
 void consoleWin_t::stopMovie(void)
@@ -1785,6 +1885,171 @@ void consoleWin_t::aboutQt(void)
    return;
 }
 
+void consoleWin_t::openMsgLogWin(void)
+{
+	//printf("Open Message Log Window\n");
+	MsgLogViewDialog_t *msgLogWin;
+	
+	msgLogWin = new MsgLogViewDialog_t(this);
+
+	msgLogWin->show();
+
+   return;
+}
+
+int consoleWin_t::setNicePriority( int value )
+{
+	int ret = 0;
+#if defined(__linux__)
+
+	if ( value < -20 )
+	{
+		value = -20;
+	}
+	else if ( value > 19 )
+	{
+		value =  19;
+	}
+
+	if ( ::setpriority( PRIO_PROCESS, getpid(), value ) )
+	{
+		perror("Emulator thread setpriority error: ");
+		ret = -1;
+	}
+#elif defined(__APPLE__)
+
+	if ( value < -20 )
+	{
+		value = -20;
+	}
+	else if ( value > 20 )
+	{
+		value =  20;
+	}
+
+	if ( ::setpriority( PRIO_PROCESS, getpid(), value ) )
+	{
+		perror("Emulator thread setpriority error: ");
+		ret = -1;
+	}
+#endif
+	return ret;
+}
+
+int consoleWin_t::getNicePriority(void)
+{
+	return ::getpriority( PRIO_PROCESS, getpid() );
+}
+
+int consoleWin_t::getMinSchedPriority(void)
+{
+	int policy, prio;
+
+	if ( getSchedParam( policy, prio ) )
+	{
+		return 0;
+	}
+	return sched_get_priority_min( policy );
+}
+
+int consoleWin_t::getMaxSchedPriority(void)
+{
+	int policy, prio;
+
+	if ( getSchedParam( policy, prio ) )
+	{
+		return 0;
+	}
+	return sched_get_priority_max( policy );
+}
+
+int consoleWin_t::getSchedParam( int &policy, int &priority )
+{
+	int ret = 0;
+
+#if defined(__linux__)
+	struct sched_param  p;
+
+	policy = sched_getscheduler( getpid() );
+
+	if ( sched_getparam( getpid(), &p ) )
+	{
+		perror("GUI thread sched_getparam error: ");
+		ret = -1;
+		priority = 0;
+	}
+	else
+	{
+		priority = p.sched_priority;
+	}
+
+#elif defined(__APPLE__)
+	struct sched_param  p;
+
+	if ( pthread_getschedparam( pthread_self(), &policy, &p ) )
+	{
+		perror("GUI thread pthread_getschedparam error: ");
+		ret = -1;
+		priority = 0;
+	}
+	else
+	{
+		priority = p.sched_priority;
+	}
+#endif
+	return ret;
+}
+
+int consoleWin_t::setSchedParam( int policy, int priority )
+{
+	int ret = 0;
+#if defined(__linux__)
+	struct sched_param  p;
+	int minPrio, maxPrio;
+
+	minPrio = sched_get_priority_min( policy );
+	maxPrio = sched_get_priority_max( policy );
+
+	if ( priority < minPrio )
+	{
+		priority = minPrio;
+	}
+	else if ( priority > maxPrio )
+	{
+		priority = maxPrio;
+	}
+	p.sched_priority = priority;
+
+	if ( sched_setscheduler( getpid(), policy, &p ) )
+	{
+		perror("GUI thread sched_setscheduler error");
+		ret = -1;
+	}
+#elif defined(__APPLE__)
+	struct sched_param  p;
+	int minPrio, maxPrio;
+
+	minPrio = sched_get_priority_min( policy );
+	maxPrio = sched_get_priority_max( policy );
+
+	if ( priority < minPrio )
+	{
+		priority = minPrio;
+	}
+	else if ( priority > maxPrio )
+	{
+		priority = maxPrio;
+	}
+	p.sched_priority = priority;
+
+	if ( ::pthread_setschedparam( pthread_self(), policy, &p ) != 0 )
+	{
+		perror("GUI thread pthread_setschedparam error: ");
+	}
+#endif
+	return ret;
+}
+
 void consoleWin_t::syncActionConfig( QAction *act, const char *property )
 {
 	if ( act->isCheckable() )
@@ -1833,13 +2098,213 @@ void consoleWin_t::updatePeriodic(void)
 		errorMsgValid = false;
 	}
 
+	if ( closeRequested )
+	{
+		closeApp();
+		closeRequested = false;
+	}
+
    return;
+}
+
+emulatorThread_t::emulatorThread_t(void)
+{
+	#if defined(__linux__) || defined(__APPLE__)
+	pself = 0;
+	#endif
+
+}
+
+#ifdef __linux__
+#ifndef SYS_gettid
+#error "SYS_gettid unavailable on this system"
+#endif
+
+#define gettid() ((pid_t)syscall(SYS_gettid))
+#endif
+
+
+void emulatorThread_t::init(void)
+{
+	int opt;
+
+	#if defined(__linux__) || defined(__APPLE__)
+	if ( pthread_self() == (pthread_t)QThread::currentThreadId() )
+	{
+		pself = pthread_self();
+		//printf("EMU is using PThread: %p\n", (void*)pself);
+	}
+	#endif
+
+	#if defined(__linux__)
+	pid = gettid();
+	#elif defined(__APPLE__)
+	pid = getpid();
+	#endif
+
+	g_config->getOption( "SDL.SetSchedParam", &opt );
+
+	if ( opt )
+	{
+		int policy, prio, nice;
+
+		g_config->getOption( "SDL.EmuSchedPolicy", &policy );
+		g_config->getOption( "SDL.EmuSchedPrioRt", &prio   );
+		g_config->getOption( "SDL.EmuSchedNice"  , &nice   );
+
+		setNicePriority( nice );
+
+		setSchedParam( policy, prio );
+	}
+}
+
+void emulatorThread_t::setPriority( QThread::Priority priority_req )
+{
+	//printf("New Priority: %i \n", priority_req );
+	//printf("Old Priority: %i \n", priority() );
+
+	QThread::setPriority( priority_req );
+
+	//printf("Set Priority: %i \n", priority() );
+}
+
+int emulatorThread_t::setNicePriority( int value )
+{
+	int ret = 0;
+#if defined(__linux__)
+
+	if ( value < -20 )
+	{
+		value = -20;
+	}
+	else if ( value > 19 )
+	{
+		value =  19;
+	}
+
+	if ( ::setpriority( PRIO_PROCESS, pid, value ) )
+	{
+		perror("Emulator thread setpriority error: ");
+		ret = -1;
+	}
+#elif defined(__APPLE__)
+
+	if ( value < -20 )
+	{
+		value = -20;
+	}
+	else if ( value > 20 )
+	{
+		value =  20;
+	}
+
+	if ( ::setpriority( PRIO_PROCESS, pid, value ) )
+	{
+		perror("Emulator thread setpriority error: ");
+		ret = -1;
+	}
+#endif
+	return ret;
+}
+
+int emulatorThread_t::getNicePriority(void)
+{
+	return ::getpriority( PRIO_PROCESS, pid );
+}
+
+int emulatorThread_t::getMinSchedPriority(void)
+{
+	int policy, prio;
+
+	if ( getSchedParam( policy, prio ) )
+	{
+		return 0;
+	}
+	return sched_get_priority_min( policy );
+}
+
+int emulatorThread_t::getMaxSchedPriority(void)
+{
+	int policy, prio;
+
+	if ( getSchedParam( policy, prio ) )
+	{
+		return 0;
+	}
+	return sched_get_priority_max( policy );
+}
+
+int emulatorThread_t::getSchedParam( int &policy, int &priority )
+{
+	struct sched_param  p;
+
+	if ( pthread_getschedparam( pself, &policy, &p ) )
+	{
+		perror("Emulator thread pthread_getschedparam error: ");
+		return -1;
+	}
+	priority = p.sched_priority;
+
+	return 0;
+}
+
+int emulatorThread_t::setSchedParam( int policy, int priority )
+{
+	int ret = 0;
+#if defined(__linux__)
+	struct sched_param  p;
+	int minPrio, maxPrio;
+
+	minPrio = sched_get_priority_min( policy );
+	maxPrio = sched_get_priority_max( policy );
+
+	if ( priority < minPrio )
+	{
+		priority = minPrio;
+	}
+	else if ( priority > maxPrio )
+	{
+		priority = maxPrio;
+	}
+	p.sched_priority = priority;
+
+	if ( ::pthread_setschedparam( pself, policy, &p ) != 0 )
+	{
+		perror("Emulator thread pthread_setschedparam error: ");
+		ret = -1;
+	}
+
+#elif defined(__APPLE__)
+	struct sched_param  p;
+	int minPrio, maxPrio;
+
+	minPrio = sched_get_priority_min( policy );
+	maxPrio = sched_get_priority_max( policy );
+
+	if ( priority < minPrio )
+	{
+		priority = minPrio;
+	}
+	else if ( priority > maxPrio )
+	{
+		priority = maxPrio;
+	}
+	p.sched_priority = priority;
+
+	if ( ::pthread_setschedparam( pself, policy, &p ) != 0 )
+	{
+		perror("Emulator thread pthread_setschedparam error: ");
+	}
+#endif
+	return ret;
 }
 
 void emulatorThread_t::run(void)
 {
 	printf("Emulator Start\n");
 	nes_shm->runEmulator = 1;
+
+	init();
 
 	while ( nes_shm->runEmulator )
 	{

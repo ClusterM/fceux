@@ -85,10 +85,12 @@ else(WIN32)
   endif()
 
   # Check for LUA
-  pkg_check_modules( LUA lua-5.1)
+  pkg_search_module( LUA lua5.1 lua-5.1 )
 
   if ( ${LUA_FOUND} )
      # Use System LUA
+	  message( STATUS "Using System Lua ${LUA_VERSION}" )
+
 	  add_definitions( -D_S9XLUA_H  ${LUA_CFLAGS} )
 
 	  set( LUA_ENGINE_SOURCE  ${CMAKE_CURRENT_SOURCE_DIR}/lua-engine.cpp )
@@ -96,6 +98,8 @@ else(WIN32)
   else ()
 
      # Use Internal LUA
+	  message( STATUS "Using Internal Lua" )
+
      add_definitions( -D_S9XLUA_H  -I${CMAKE_CURRENT_SOURCE_DIR}/lua/src )
 
 	  set( LUA_ENGINE_SOURCE  
@@ -279,6 +283,7 @@ set(SRC_CORE
   	${CMAKE_CURRENT_SOURCE_DIR}/boards/BMW8544.cpp
   	${CMAKE_CURRENT_SOURCE_DIR}/boards/bonza.cpp
   	${CMAKE_CURRENT_SOURCE_DIR}/boards/bs-5.cpp
+  	${CMAKE_CURRENT_SOURCE_DIR}/boards/bs4xxxr.cpp
   	${CMAKE_CURRENT_SOURCE_DIR}/boards/cheapocabra.cpp
   	${CMAKE_CURRENT_SOURCE_DIR}/boards/cityfighter.cpp
   	${CMAKE_CURRENT_SOURCE_DIR}/boards/coolboy.cpp
@@ -428,14 +433,20 @@ set(SRC_DRIVERS_SDL
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleWindow.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleViewerGL.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleViewerSDL.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/InputConf.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/GamePadConf.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/HotKeyConf.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/TimingConf.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/FrameTimingStats.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/PaletteConf.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/GuiConf.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/MoviePlay.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/MovieOptions.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/LuaControl.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/CheatsConf.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/GameGenie.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/HexEditor.cpp  
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/MsgLogViewer.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/CodeDataLogger.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/SymbolicDebug.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/ConsoleDebugger.cpp  

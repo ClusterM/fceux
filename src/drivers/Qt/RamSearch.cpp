@@ -1467,12 +1467,33 @@ QRamSearchView::QRamSearchView(QWidget *parent)
 	: QWidget(parent)
 {
 	QPalette pal;
-	QColor fg(0,0,0), bg(255,255,255);
+	QColor c, fg(0,0,0), bg(255,255,255);
+	bool useDarkTheme = false;
 
 	pal = this->palette();
-	pal.setColor(QPalette::Base      , bg );
-	pal.setColor(QPalette::Background, bg );
-	pal.setColor(QPalette::WindowText, fg );
+
+	// Figure out if we are using a light or dark theme by checking the 
+	// default window text grayscale color. If more white, then we will
+	// use white text on black background, else we do the opposite.
+	c = pal.color(QPalette::WindowText);
+
+	if ( qGray( c.red(), c.green(), c.blue() ) > 128 )
+	{
+		useDarkTheme = true;
+	}
+
+	if ( useDarkTheme )
+	{
+		pal.setColor(QPalette::Base      , fg );
+		pal.setColor(QPalette::Background, fg );
+		pal.setColor(QPalette::WindowText, bg );
+	}
+	else 
+	{
+		pal.setColor(QPalette::Base      , bg );
+		pal.setColor(QPalette::Background, bg );
+		pal.setColor(QPalette::WindowText, fg );
+	}
 	this->setPalette(pal);
 
 	font.setFamily("Courier New");
@@ -1485,6 +1506,8 @@ QRamSearchView::QRamSearchView(QWidget *parent)
 	maxLineOffset = 0;
    selAddr = -1;
    selLine = -1;
+
+	wheelPixelCounter = 0;
 
    setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Expanding );
    setFocusPolicy(Qt::StrongFocus);
@@ -1640,6 +1663,54 @@ void QRamSearchView::mousePressEvent(QMouseEvent * event)
 	{
       selLine = lineOffset + lineNum;
 	}
+}
+//----------------------------------------------------------------------------
+void QRamSearchView::wheelEvent(QWheelEvent *event)
+{
+
+	QPoint numPixels  = event->pixelDelta();
+	QPoint numDegrees = event->angleDelta();
+
+	if (!numPixels.isNull()) 
+	{
+		wheelPixelCounter -= numPixels.y();
+	   //printf("numPixels: (%i,%i) \n", numPixels.x(), numPixels.y() );
+	} 
+	else if (!numDegrees.isNull()) 
+	{
+		//QPoint numSteps = numDegrees / 15;
+		//printf("numSteps: (%i,%i) \n", numSteps.x(), numSteps.y() );
+		//printf("numDegrees: (%i,%i)  %i\n", numDegrees.x(), numDegrees.y(), pxLineSpacing );
+		wheelPixelCounter -= (pxLineSpacing * numDegrees.y()) / (15*8);
+	}
+	//printf("Wheel Event: %i\n", wheelPixelCounter);
+
+	if ( wheelPixelCounter >= pxLineSpacing )
+	{
+		lineOffset += (wheelPixelCounter / pxLineSpacing);
+
+		if ( lineOffset > maxLineOffset )
+		{
+			lineOffset = maxLineOffset;
+		}
+		vbar->setValue( lineOffset );
+
+		wheelPixelCounter = wheelPixelCounter % pxLineSpacing;
+	}
+	else if ( wheelPixelCounter <= -pxLineSpacing )
+	{
+		lineOffset += (wheelPixelCounter / pxLineSpacing);
+
+		if ( lineOffset < 0 )
+		{
+			lineOffset = 0;
+		}
+		vbar->setValue( lineOffset );
+
+		wheelPixelCounter = wheelPixelCounter % pxLineSpacing;
+	}
+
+	 event->accept();
 }
 //----------------------------------------------------------------------------
 void QRamSearchView::paintEvent(QPaintEvent *event)

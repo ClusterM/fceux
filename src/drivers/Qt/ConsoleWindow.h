@@ -28,10 +28,32 @@ class  emulatorThread_t : public QThread
 {
 	Q_OBJECT
 
-	//public slots:
+	protected:
 		void run( void ) override;
+
+	public:
+		emulatorThread_t(void);
+
+		void setPriority( QThread::Priority priority );
+
+		#if defined(__linux__) || defined(__APPLE__)
+		int setSchedParam( int policy, int priority );
+		int getSchedParam( int &policy, int &priority );
+		int setNicePriority( int value );
+		int getNicePriority( void );
+		int getMinSchedPriority(void);
+		int getMaxSchedPriority(void);
+		#endif
+	private:
+		void init(void);
+
+		#if defined(__linux__) || defined(__APPLE__)
+		pthread_t  pself;
+		int        pid;
+		#endif
+
 	signals:
-    void finished();
+		void finished();
 };
 
 class  consoleWin_t : public QMainWindow
@@ -49,9 +71,22 @@ class  consoleWin_t : public QMainWindow
 
 		QMutex *mutex;
 
+		void requestClose(void);
+
 	 	void QueueErrorMsgWindow( const char *msg );
 
 		int  showListSelectDialog( const char *title, std::vector <std::string> &l );
+
+		#if defined(__linux__) || defined(__APPLE__)
+		int setSchedParam( int policy, int priority );
+		int getSchedParam( int &policy, int &priority );
+		int setNicePriority( int value );
+		int getNicePriority( void );
+		int getMinSchedPriority(void);
+		int getMaxSchedPriority(void);
+		#endif
+
+		emulatorThread_t *emulatorThread;
 
 	protected:
 	 QMenu *fileMenu;
@@ -72,17 +107,20 @@ class  consoleWin_t : public QMainWindow
     QAction *loadLuaAct;
     QAction *scrShotAct;
     QAction *quitAct;
+    QAction *inputConfig;
     QAction *gamePadConfig;
     QAction *gameSoundConfig;
     QAction *gameVideoConfig;
     QAction *hotkeyConfig;
     QAction *paletteConfig;
     QAction *guiConfig;
+    QAction *timingConfig;
     QAction *movieConfig;
     QAction *autoResume;
     QAction *fullscreen;
     QAction *aboutAct;
     QAction *aboutActQt;
+    QAction *msgLogAct;
 	 QAction *state[10];
 	 QAction *powerAct;
 	 QAction *resetAct;
@@ -103,6 +141,7 @@ class  consoleWin_t : public QMainWindow
 	 QAction *hexEditAct;
 	 QAction *ppuViewAct;
 	 QAction *ntViewAct;
+	 QAction *ggEncodeAct;
 	 QAction *iNesEditAct;
 	 QAction *openMovAct;
 	 QAction *stopMovAct;
@@ -111,10 +150,9 @@ class  consoleWin_t : public QMainWindow
 
 	 QTimer  *gameTimer;
 
-	 emulatorThread_t *emulatorThread;
-
 	 std::string errorMsg;
 	 bool        errorMsgValid;
+	 bool        closeRequested;
 
 	protected:
     void closeEvent(QCloseEvent *event);
@@ -129,6 +167,7 @@ class  consoleWin_t : public QMainWindow
 	public slots:
 		void openDebugWindow(void);
 		void openHexEditor(void);
+      void openGamePadConfWin(void);
 	private slots:
 		void closeApp(void);
 		void openROMFile(void);
@@ -140,12 +179,15 @@ class  consoleWin_t : public QMainWindow
 		void closeROMCB(void);
       void aboutFCEUX(void);
       void aboutQt(void);
-      void openGamePadConfWin(void);
+      void openMsgLogWin(void);
+      void openInputConfWin(void);
       void openGameSndConfWin(void);
       void openGameVideoConfWin(void);
       void openHotkeyConfWin(void);
       void openPaletteConfWin(void);
       void openGuiConfWin(void);
+      void openTimingConfWin(void);
+      void openTimingStatWin(void);
       void openMovieOptWin(void);
 		void openCodeDataLogger(void);
 		void openTraceLogger(void);
@@ -183,6 +225,7 @@ class  consoleWin_t : public QMainWindow
 		void emuSetFrameAdvDelay(void);
 		void openPPUViewer(void);
 		void openNTViewer(void);
+		void openGGEncoder(void);
 		void openNesHeaderEditor(void);
 		void openCheats(void);
 		void openRamWatch(void);

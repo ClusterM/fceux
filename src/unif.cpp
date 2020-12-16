@@ -475,7 +475,8 @@ static BMAPPING bmap[] = {
 	{ "FNS", FNS_Init, BMCFLAG_16KCHRR },
 	{ "COOLGIRL", COOLGIRL_Init, 0 },
 	{ "WARFACE", WARFACE_Init, 0 },
-
+	{ "BS-400R", BS400R_Init, 0 },
+	{ "BS-4040R", BS4040R_Init, 0 },
 	{ 0, 0, 0 }
 };
 
@@ -539,7 +540,7 @@ static int InitializeBoard(void) {
 					CHRRAMSize = 256;
 				else
 					CHRRAMSize = 8;
-					CHRRAMSize <<= 10;
+				CHRRAMSize <<= 10;
 				if ((UNIFchrrama = (uint8*)FCEU_malloc(CHRRAMSize))) {
 					SetupCartCHRMapping(0, UNIFchrrama, CHRRAMSize, 1);
 					AddExState(UNIFchrrama, CHRRAMSize, 0, "CHRR");

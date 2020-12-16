@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <unzip.h>
 
+#include <QStyleFactory>
 #include "Qt/main.h"
 #include "Qt/throttle.h"
 #include "Qt/config.h"
@@ -81,33 +82,9 @@ int mutecapture = 0;
 //*****************************************************************
 //
 
-/**
-* Prints a textual message without adding a newline at the end.
-*
-* @param text The text of the message.
-*
-* TODO: This function should have a better name.
-**/
-void FCEUD_Message(const char *text)
-{
-	fputs(text, stdout);
-	//fprintf(stdout, "\n");
-}
-
-/**
-* Shows an error message in a message box.
-* (For now: prints to stderr.)
-* 
-* If running in Qt mode, display a dialog message box of the error.
-*
-* @param errormsg Text of the error message.
-**/
-void FCEUD_PrintError(const char *errormsg)
-{
-	fprintf(stderr, "%s\n", errormsg);
-
-	consoleWindow->QueueErrorMsgWindow( errormsg );
-}
+// Message functions defined in MsgLogViewer.cpp
+//void FCEUD_Message(const char *text)
+//void FCEUD_PrintError(const char *errormsg)
 
 /**
  * Opens a file, C++ style, to be read a byte at a time.
@@ -229,11 +206,25 @@ int reloadLastGame(void)
  */
 int LoadGame(const char *path, bool silent)
 {
-	int gg_enabled, autoLoadDebug, autoOpenDebugger;
+	char fullpath[4096];
+	int gg_enabled, autoLoadDebug, autoOpenDebugger, autoInputPreset;
 
 	if (isloaded){
 		CloseGame();
 	}
+
+#if defined(__linux) || defined(__APPLE__)
+
+	// Resolve absolute path to file
+	if ( realpath( path, fullpath ) == NULL )
+	{
+		strcpy( fullpath, path );
+	}
+#else
+	strcpy( fullpath, path );
+#endif
+
+	//printf("Fullpath: %zi '%s'\n", sizeof(fullpath), fullpath );
 
 	// For some reason, the core of the emulator clears the state of 
 	// the game genie option selection. So check the config each time
@@ -242,7 +233,7 @@ int LoadGame(const char *path, bool silent)
 
 	FCEUI_SetGameGenie (gg_enabled);
 
-	if(!FCEUI_LoadGame(path, 1, silent)) {
+	if(!FCEUI_LoadGame(fullpath, 1, silent)) {
 		return 0;
 	}
 
@@ -266,12 +257,19 @@ int LoadGame(const char *path, bool silent)
 
 	CDLoggerROMChanged();
 
-    int state_to_load;
-    g_config->getOption("SDL.AutoLoadState", &state_to_load);
-    if (state_to_load >= 0 && state_to_load < 10){
-        FCEUI_SelectState(state_to_load, 0);
-        FCEUI_LoadState(NULL, false);
-    }
+	int state_to_load;
+	g_config->getOption("SDL.AutoLoadState", &state_to_load);
+	if (state_to_load >= 0 && state_to_load < 10){
+	    FCEUI_SelectState(state_to_load, 0);
+	    FCEUI_LoadState(NULL, false);
+	}
+
+	g_config->getOption( "SDL.AutoInputPreset", &autoInputPreset );
+
+	if ( autoInputPreset )
+	{
+		loadInputSettingsFromFile();
+	}
 
 	ParseGIInput(GameInfo);
 	RefreshThrottleFPS();
@@ -320,12 +318,21 @@ CloseGame(void)
 	debugSymbolTable.clear();
 	CDLoggerROMClosed();
 
-    int state_to_save;
-    g_config->getOption("SDL.AutoSaveState", &state_to_save);
-    if (state_to_save < 10 && state_to_save >= 0){
-        FCEUI_SelectState(state_to_save, 0);
-        FCEUI_SaveState(NULL, false);
-    }
+   int state_to_save;
+   g_config->getOption("SDL.AutoSaveState", &state_to_save);
+   if (state_to_save < 10 && state_to_save >= 0){
+       FCEUI_SelectState(state_to_save, 0);
+       FCEUI_SaveState(NULL, false);
+   }
+
+	int autoInputPreset;
+	g_config->getOption( "SDL.AutoInputPreset", &autoInputPreset );
+
+	if ( autoInputPreset )
+	{
+		saveInputSettingsToFile();
+	}
+
 	FCEUI_CloseGame();
 
 	DriverKill();
@@ -376,11 +383,18 @@ bool fceuWrapperGameLoaded(void)
 	return (isloaded ? true : false);
 }
 
+void fceuWrapperRequestAppExit(void)
+{
+	if ( consoleWindow )
+	{
+		consoleWindow->requestClose();
+	}
+}
+
 static const char *DriverUsage =
 "Option         Value   Description\n"
 "--pal          {0|1}   Use PAL timing.\n"
 "--newppu       {0|1}   Enable the new PPU core. (WARNING: May break savestates)\n"
-"--inputcfg     d       Configures input device d on startup.\n"
 "--input(1,2)   d       Set which input device to emulate for input 1 or 2.\n"
 "                         Devices:  gamepad zapper powerpad.0 powerpad.1\n"
 "                         arkanoid\n"
@@ -398,8 +412,6 @@ static const char *DriverUsage =
 "--(x/y)scale   x       Multiply width/height by x. \n"
 "                         (Real numbers >0 with OpenGL, otherwise integers >0).\n"
 "--(x/y)stretch {0|1}   Stretch to fill surface on x/y axis (OpenGL only).\n"
-"--bpp       {8|16|32}  Set bits per pixel.\n"
-"--opengl       {0|1}   Enable OpenGL support.\n"
 "--fullscreen   {0|1}   Enable full screen mode.\n"
 "--noframe      {0|1}   Hide title bar and window decorations.\n"
 "--special      {1-4}   Use special video scaling filters\n"
@@ -428,7 +440,6 @@ static const char *DriverUsage =
 "--players      x       Set the number of local players in a network play\n"
 "                       session.\n"
 "--rp2mic       {0|1}   Replace Port 2 Start with microphone (Famicom).\n"
-"--nogui                Don't load the GTK GUI\n"
 "--4buttonexit {0|1}    exit the emulator when A+B+Select+Start is pressed\n"
 "--loadstate {0-9|>9}   load from the given state when the game is loaded\n"
 "--savestate {0-9|>9}   save to the given state when the game is closed\n"
@@ -439,6 +450,7 @@ static const char *DriverUsage =
 
 static void ShowUsage(const char *prog)
 {
+	int i,j;
 	printf("\nUsage is as follows:\n%s <options> filename\n\n",prog);
 	puts(DriverUsage);
 #ifdef _S9XLUA_H
@@ -448,6 +460,25 @@ static void ShowUsage(const char *prog)
 	puts ("--videolog     c       Calls mencoder to grab the video and audio streams to\n                         encode them. Check the documentation for more on this.");
 	puts ("--mute        {0|1}    Mutes FCEUX while still passing the audio stream to\n                         mencoder during avi creation.");
 #endif
+	puts ("--style=KEY            Use Qt GUI Style based on supplied key. Available system style keys are:\n");
+
+	QStringList styleList = QStyleFactory::keys();
+
+	j=0;
+	for (i=0; i<styleList.size(); i++)
+	{
+		printf("  %16s  ", styleList[i].toStdString().c_str() ); j++;
+
+		if ( j >= 4 )
+		{
+			printf("\n"); j=0;
+		}
+	}
+	printf("\n\n");
+	printf(" Custom Qt stylesheets (.qss files) may be used by setting an\n");
+	printf(" environment variable named FCEUX_QT_STYLESHEET equal to the \n");
+	printf(" full (absolute) path to the qss file.\n");
+
 	puts("");
 	printf("Compiled with SDL version %d.%d.%d\n", SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL );
 	SDL_version v; 
@@ -521,16 +552,7 @@ int  fceuWrapperInit( int argc, char *argv[] )
 		g_config->save();
 	}
 
-
-	//g_config->getOption("SDL.InputCfg", &s);
-
-	//if (s.size() != 0)
-	//{
-	//	InitVideo(GameInfo);
-	//	InputCfg(s);
-	//}
-
-	 // update the input devices
+	// update the input devices
 	UpdateInput(g_config);
 
 	// check for a .fcm file to convert to .fm2
@@ -699,6 +721,15 @@ int  fceuWrapperInit( int argc, char *argv[] )
 		// not exactly an id as an true/false switch; still better than creating another int for that
 		g_config->getOption("SDL.SubtitleDisplay", &id); 
 		movieSubtitles = id ? true : false;
+	}
+
+	// Emulation Timing Mechanism
+	{
+		int timingMode;
+
+		g_config->getOption("SDL.EmuTimingMech", &timingMode);
+
+		setTimingMode( timingMode );
 	}
 	
 	// load the hotkeys from the config life
@@ -921,13 +952,6 @@ FCEUD_Update(uint8 *XBuf,
 	}
   	else 
 	{
-		//if (!NoWaiting && (!(eoptions&EO_NOTHROTTLE) || FCEUI_EmulationPaused()))
-		//{
-		//	while (SpeedThrottle())
-		//	{
-		//		FCEUD_UpdateInput();
-		//	}
-		//}
 		if (XBuf && (inited&4)) 
 		{
 			BlitScreen(XBuf); blitDone = 1;

@@ -1108,10 +1108,13 @@
     <ClCompile Include="..\src\boards\coolgirl.cpp">
       <Filter>boards</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\boards\warface.cpp">
+      <Filter>boards</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\input\lcdcompzapper.cpp">
       <Filter>input</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\boards\warface.cpp">
+    <ClCompile Include="..\src\boards\bs4xxxr.cpp">
       <Filter>boards</Filter>
     </ClCompile>
   </ItemGroup>
