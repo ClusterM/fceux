@@ -427,8 +427,9 @@ static DECLFW(COOLGIRL_Flash_Write) {
 			flash_state = 0;
 		}
 
+		// enter CFI mode
 		if ((flash_state == 1) &&
-			((flash_buffer_a[0] & 0xFF) == 0x0AAA) && (flash_buffer_v[0] == 0x98))
+			(flash_buffer_a[0] == 0x0AAA) && (flash_buffer_v[0] == 0x98))
 		{
 			cfi_mode = 1;
 			COOLGIRL_Sync_PRG();
