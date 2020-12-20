@@ -591,16 +591,16 @@ static DECLFW(COOLGIRL_WRITE) {
 				else {
 					four_screen = 0;
 					// case ({cpu_data_in[4], cpu_data_in[2]})
-					switch (get_bits(A, "4,2"))
+					switch (get_bits(V, "4,2"))
 					{
 					case 0b00: // 2'b00: mirroring = 2'b10;
-						mirroring = 2; break;
+						mirroring = 0b10; break;
 					case 0b01: // 2'b01: mirroring = 2'b00;
-						mirroring = 0; break;
+						mirroring = 0b00; break;
 					case 0b10: // 2'b10: mirroring = 2'b01;
-						mirroring = 1; break;
+						mirroring = 0b01; break;
 					case 0b11: // 2'b11: mirroring = 2'b11;
-						mirroring = 3; break;
+						mirroring = 0b11; break;
 					}
 				}
 				break;
@@ -614,11 +614,11 @@ static DECLFW(COOLGIRL_WRITE) {
 				break;
 			case 0x5116:
 				// prg_bank_c[4:0] = cpu_data_in[4:0];
-				SET_BITS(prg_bank_c, "7:0", V, "7:0");
+				SET_BITS(prg_bank_c, "4:0", V, "4:0");
 				break;
 			case 0x5117:
 				// prg_bank_d[4:0] = cpu_data_in[4:0];
-				SET_BITS(prg_bank_d, "7:0", V, "7:0");
+				SET_BITS(prg_bank_d, "4:0", V, "4:0");
 				break;
 			case 0x5120:
 				// chr_bank_a[7:0] = cpu_data_in[7:0];
@@ -656,12 +656,14 @@ static DECLFW(COOLGIRL_WRITE) {
 				// mmc5_irq_ack = 1;
 				X6502_IRQEnd(FCEU_IQEXT);
 				mmc5_irq_out = 0;
+				// mmc5_irq_line[7:0] = cpu_data_in[7:0];
 				SET_BITS(mmc5_irq_line, "7:0", V, "7:0");
 				break;
 			case 0x5204:
 				// mmc5_irq_ack = 1;
 				X6502_IRQEnd(FCEU_IQEXT);
 				mmc5_irq_out = 0;
+				// mmc5_irq_enabled = cpu_data_in[7];
 				mmc5_irq_enabled = get_bits(V, "7");
 				break;
 			}
@@ -1721,9 +1723,9 @@ static DECLFR(MAFRAM) {
 	// MMC5
 	if ((mapper == 0b001111) && (A == 0x5204))
 	{
-		uint8 p = mmc5_irq_out;
 		int ppuon = (PPU[1] & 0x18);
 		uint8 r = (!ppuon || scanline + 1 >= 241) ? 0 : 1;
+		uint8 p = mmc5_irq_out;
 		X6502_IRQEnd(FCEU_IQEXT);
 		mmc5_irq_out = 0;
 		return (p << 7) | (r << 6);
