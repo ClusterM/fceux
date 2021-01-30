@@ -93,8 +93,8 @@ static uint8 mapper163_r4 = 0;			// [7:0]
 static uint8 mapper163_r5 = 0;			// [7:0]
 
 // For mapper #90
-static uint8 REG_mul1 = 0;
-static uint8 REG_mul2 = 0;
+static uint8 mul1 = 0;
+static uint8 mul2 = 0;
 
 // for MMC3 scanline-based interrupts, counts A12 rises after long A12 falls
 static uint8 mmc3_irq_enabled = 0;				// register to enable/disable counter
@@ -131,6 +131,10 @@ static uint16 vrc3_irq_latch = 0;				// [15:0], stores counter reload latch valu
 // for mapper #42 (only Baby Mario)
 static uint8 mapper42_irq_enabled = 0;			// register to enable/disable counter
 static uint16 mapper42_irq_value = 0;			// [14:0], counter itself (upcounting)
+// for mapper #83
+static uint8 mapper83_irq_enabled_latch = 0;
+static uint8 mapper83_irq_enabled = 0;
+static uint16 mapper83_irq_counter = 0;
 // for mapper #90
 static uint8 mapper90_xor = 0;
 
@@ -567,12 +571,12 @@ static DECLFW(COOLGIRL_WRITE) {
 
 		// Mapper #90 - JY
 		/*
-		if (REG_mapper == 0b001101)
+		if (mapper == 0b001101)
 		{
 			switch (A)
 			{
-			case 0x5800: REG_mul1 = V; break;
-			case 0x5801: REG_mul2 = V; break;
+			case 0x5800: mul1 = V; break;
+			case 0x5801: mul2 = V; break;
 			}
 		}
 		*/
@@ -680,7 +684,7 @@ static DECLFW(COOLGIRL_WRITE) {
 			}
 		}
 
-		// Mapper #113
+		// Mappers NINA-03/06 and Sachen 3015: #113 (flag0 = 0), #79 and #146 (flag0 = 1)
 		if (mapper == 0b011011)
 		{
 			// if ({cpu_addr_in[14:13], cpu_addr_in[8]} == 3'b101)
@@ -691,7 +695,8 @@ static DECLFW(COOLGIRL_WRITE) {
 				//prg_bank_a[4:2] = cpu_data_in[5:3];
 				SET_BITS(prg_bank_a, "4:2", V, "5:3");
 				//mirroring = { 1'b0, ~cpu_data_in[7]};
-				mirroring = get_bits(V, "7") ^ 1;
+				if (!(flags & 1)) // if (!flags[0])
+					mirroring = get_bits(V, "7") ^ 1;
 			}
 		}
 
@@ -1703,6 +1708,55 @@ static DECLFW(COOLGIRL_WRITE) {
 				SET_BITS(chr_bank_e, "5:2", V, "3:0"); break;
 			}
 		}
+
+		// Mapper #83 - Cony/Yoko
+		if (mapper == 0b100011)
+		{
+			// case (cpu_addr_in[9:8])
+			switch (get_bits(A, "9:8"))
+			{
+			case 0b01: // $81xx
+				mirroring = get_bits(V, "1:0"); // mirroring <= cpu_data_in[1:0];
+				mapper83_irq_enabled_latch = get_bits(V, "7"); // mapper83_irq_enabled_latch <= cpu_data_in[7];
+				break;
+			case 0b10: // 82xx
+				if (!get_bits(A, "0")) // if (!cpu_addr_in[0])
+				{
+					X6502_IRQEnd(FCEU_IQEXT); // mapper83_irq_out <= 0;
+					SET_BITS(mapper83_irq_counter, "7:0", V, "7:0"); // mapper83_irq_counter[7:0] <= cpu_data_in[7:0];
+				}
+				else {
+					mapper83_irq_enabled = mapper83_irq_enabled_latch; //mapper83_irq_enabled <= mapper83_irq_enabled_latch;
+					SET_BITS(mapper83_irq_counter, "15:8", V, "7:0"); // mapper83_irq_counter[15:8] <= cpu_data_in[7:0];
+				}
+				break;
+			case 0b11:
+				if (!get_bits(A, "4")) // if (!cpu_addr_in[4])
+				{
+					switch (get_bits(A, "1:0")) // case (cpu_addr_in[1:0])
+					{
+					case 0b00: SET_BITS(prg_bank_a, "7:0", V, "7:0"); break; // 2'b00: prg_bank_a[7:0] <= cpu_data_in[7:0];
+					case 0b01: SET_BITS(prg_bank_b, "7:0", V, "7:0"); break; // 2'b01: prg_bank_b[7:0] <= cpu_data_in[7:0];
+					case 0b10: SET_BITS(prg_bank_b, "7:0", V, "7:0"); break; // 2'b10: prg_bank_c[7:0] <= cpu_data_in[7:0];
+					//case 0b11: SET_BITS(prg_bank_6000, "7:0", V, "7:0"); break; //2'b11: prg_bank_6000[7:0] <= cpu_data_in[7:0];
+					}
+				}
+				else {
+					switch (get_bits(A, "2:0")) // case (cpu_addr_in[2:0])
+					{
+					case 0b000: SET_BITS(chr_bank_a, "7:0", V, "7:0"); break; // 3'b000: chr_bank_a[7:0] <= cpu_data_in[7:0];
+					case 0b001: SET_BITS(chr_bank_b, "7:0", V, "7:0"); break; // 3'b001: chr_bank_b[7:0] <= cpu_data_in[7:0];
+					case 0b010: SET_BITS(chr_bank_c, "7:0", V, "7:0"); break; // 3'b010: chr_bank_c[7:0] <= cpu_data_in[7:0];
+					case 0b011: SET_BITS(chr_bank_d, "7:0", V, "7:0"); break; // 3'b011: chr_bank_d[7:0] <= cpu_data_in[7:0];
+					case 0b100: SET_BITS(chr_bank_e, "7:0", V, "7:0"); break; // 3'b100: chr_bank_e[7:0] <= cpu_data_in[7:0];
+					case 0b101: SET_BITS(chr_bank_f, "7:0", V, "7:0"); break; // 3'b101: chr_bank_f[7:0] <= cpu_data_in[7:0];
+					case 0b110: SET_BITS(chr_bank_g, "7:0", V, "7:0"); break; // 3'b110: chr_bank_g[7:0] <= cpu_data_in[7:0];
+					case 0b111: SET_BITS(chr_bank_h, "7:0", V, "7:0"); break; // 3'b111: chr_bank_h[7:0] <= cpu_data_in[7:0];
+					}
+				}
+				break;
+			}
+		}
 	}
 
 	COOLGIRL_Sync();
@@ -1731,17 +1785,18 @@ static DECLFR(MAFRAM) {
 		return (p << 7) | (r << 6);
 	}
 
-	// Mapper #90 - JY
-	/*
-	if ((REG_mapper == 0b001101) && (A == 0x5800)) return (REG_mul1 * REG_mul2) & 0xFF;
-	if ((REG_mapper == 0b001101) && (A == 0x5801)) return ((REG_mul1 * REG_mul2) >> 8) & 0xFF;
-	*/
-
-	// Mapper 036 is assigned to TXC's PCB 01-22000-400
+	// Mapper #36 is assigned to TXC's PCB 01-22000-400
 	if ((mapper == 0b011101) && ((A & 0xE100) == 0x4100)) // (USE_MAPPER_036 && mapper == 5'b11101 && {cpu_addr_in[14:13], cpu_addr_in[8]} == 3'b101) ?
 	{
 		return (prg_bank_a & 0x0C) << 2; // {1'b1, 2'b00, prg_bank_a[3:2], 4'b00}
 	}
+
+	// Mapper #83 - Cony/Yoko
+	if ((mapper == 0b100011) && ((A & 0x7000) == 0x5000)) return flags & 3;
+
+	// Mapper #90 - JY
+	if ((mapper == 0b001101) && (A == 0x5800)) return (mul1 * mul2) & 0xFF;
+	if ((mapper == 0b001101) && (A == 0x5801)) return ((mul1 * mul2) >> 8) & 0xFF;
 
 	if (sram_enabled && !map_rom_on_6000 && (A >= 0x6000) && (A < 0x8000))
 		return CartBR(A);          // SRAM
@@ -1922,6 +1977,14 @@ static void COOLGIRL_CpuCounter(int a) {
 			else
 				X6502_IRQEnd(FCEU_IQEXT);
 		}
+
+		// Mapper #83 - Cony/Yoko
+		if (mapper83_irq_enabled)
+		{
+			mapper83_irq_counter--; // mapper83_irq_counter = mapper83_irq_counter - 1'b1;
+			if (mapper83_irq_counter == 0xFFFF) // if (mapper83_irq_counter == 16'b1111111111111111)
+				X6502_IRQBegin(FCEU_IQEXT); // mapper83_irq_out <= 1;
+		}
 	}
 }
 
@@ -2001,8 +2064,8 @@ static void COOLGIRL_Reset(void) {
 	mapper163_r3 = 0;
 	mapper163_r4 = 0;
 	mapper163_r5 = 0;
-	REG_mul1 = 0;
-	REG_mul2 = 0;
+	mul1 = 0;
+	mul2 = 0;
 	mmc3_irq_enabled = 0;
 	mmc3_irq_latch = 0;
 	mmc3_irq_counter = 0;
@@ -2132,8 +2195,8 @@ void COOLGIRL_Init(CartInfo *info) {
 	ExState(mapper163_r3, "1633");
 	ExState(mapper163_r4, "1634");
 	ExState(mapper163_r5, "1635");
-	ExState(REG_mul1, "MUL1");
-	ExState(REG_mul2, "MUL2");
+	ExState(mul1, "MUL1");
+	ExState(mul2, "MUL2");
 	ExState(mmc3_irq_enabled, "M4IE");
 	ExState(mmc3_irq_latch, "M4IL");
 	ExState(mmc3_irq_counter, "M4IC");
@@ -2160,6 +2223,9 @@ void COOLGIRL_Init(CartInfo *info) {
 	ExState(vrc3_irq_latch, "V3IL");
 	ExState(mapper42_irq_enabled, "42IE");
 	ExState(mapper42_irq_value, "42IV");
+	ExState(mapper83_irq_enabled_latch, "M83L");
+	ExState(mapper83_irq_enabled, "M83I");
+	ExState(mapper83_irq_counter, "M83C");
 	ExState(mapper90_xor, "90XR");
 	ExState(flash_state, "FLST");
 	ExState(flash_buffer_a, "FLBA");
