@@ -1981,9 +1981,9 @@ static void COOLGIRL_CpuCounter(int a) {
 		// Mapper #83 - Cony/Yoko
 		if (mapper83_irq_enabled)
 		{
-			mapper83_irq_counter--; // mapper83_irq_counter = mapper83_irq_counter - 1'b1;
-			if (mapper83_irq_counter == 0xFFFF) // if (mapper83_irq_counter == 16'b1111111111111111)
+			if (mapper83_irq_counter == 0) // if (mapper83_irq_counter == 0)
 				X6502_IRQBegin(FCEU_IQEXT); // mapper83_irq_out <= 1;
+			mapper83_irq_counter--; // mapper83_irq_counter = mapper83_irq_counter - 1'b1;
 		}
 	}
 }
