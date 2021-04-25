@@ -24,6 +24,7 @@
 #include <QDir>
 #include <QMenu>
 #include <QAction>
+#include <QActionGroup>
 #include <QMenuBar>
 #include <QPainter>
 #include <QInputDialog>
@@ -38,12 +39,15 @@
 #include "../../debug.h"
 #include "../../palette.h"
 
+#include "Qt/ConsoleWindow.h"
 #include "Qt/ConsoleUtilities.h"
 #include "Qt/NameTableViewer.h"
+#include "Qt/HexEditor.h"
 #include "Qt/main.h"
 #include "Qt/dface.h"
 #include "Qt/input.h"
 #include "Qt/config.h"
+#include "Qt/ppuViewer.h"
 #include "Qt/fceuWrapper.h"
 
 static ppuNameTableViewerDialog_t *nameTableViewWindow = NULL;
@@ -60,6 +64,7 @@ static bool drawScrollLines = true;
 static bool drawTileGridLines = true;
 static bool drawAttrGridLines = false;
 static bool redrawtables = true;
+static bool resetDrawCounter = true;
 
 //extern int FCEUPPU_GetAttr(int ntnum, int xt, int yt);
 
@@ -109,24 +114,37 @@ int openNameTableViewWindow( QWidget *parent )
 
 	return 0;
 }
+//----------------------------------------------------------------------------
+static int conv2hex( int i )
+{
+	int h = 0;
+	if ( i >= 10 )
+	{
+		h = 'A' + i - 10;
+	}
+	else
+	{
+		h = '0' + i;
+	}
+	return h;
+}
 //----------------------------------------------------
 ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	: QDialog( parent, Qt::Window )
 {
 	QHBoxLayout *mainLayout;
-	QVBoxLayout *vbox1, *vbox2;
+	QVBoxLayout *vbox1, *vbox2, *vbox3;
 	QHBoxLayout *hbox, *hbox1;
 	QGridLayout *grid;
 	QGroupBox   *frame;
 	QMenuBar *menuBar;
-	QMenu *viewMenu, *colorMenu, *subMenu;
-	QAction *act, *zoomAct[4], *rateAct[5];
+	QMenu *fileMenu, *viewMenu, *colorMenu, *subMenu;
+	QAction *act;
 	QActionGroup *group;
 	QLabel *lbl;
 	QFont   font;
-	char stmp[64];
+	//char stmp[64];
 	int useNativeMenuBar;
-	fceuDecIntValidtor *validator;
 
 	font.setFamily("Courier New");
 	font.setStyle( QFont::StyleNormal );
@@ -144,11 +162,22 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	//-----------------------------------------------------------------------
 	// Menu 
 	//-----------------------------------------------------------------------
+	// File
+	fileMenu = menuBar->addMenu(tr("&File"));
+
+	// File -> Close
+	act = new QAction(tr("&Close"), this);
+	act->setShortcut(QKeySequence::Close);
+	act->setStatusTip(tr("Close Window"));
+	connect(act, SIGNAL(triggered()), this, SLOT(closeWindow(void)) );
+	
+	fileMenu->addAction(act);
+
 	// View
-	viewMenu = menuBar->addMenu(tr("View"));
+	viewMenu = menuBar->addMenu(tr("&View"));
 
 	// View -> Show Scroll Lines
-	act = new QAction(tr("Show Scroll Lines"), this);
+	act = new QAction(tr("Show &Scroll Lines"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setCheckable(true);
 	act->setChecked(drawScrollLines);
@@ -158,19 +187,30 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	
 	viewMenu->addAction(act);
 
-	// View -> Show Grid Lines
-	act = new QAction(tr("Show Tile Grid"), this);
+	// View -> Show Tile Grid
+	act = new QAction(tr("Show &Tile Grid"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setCheckable(true);
 	act->setChecked(drawTileGridLines);
 	act->setStatusTip(tr("Show Tile Grid"));
-	connect(act, SIGNAL(triggered(bool)), this, SLOT(menuGridLinesChanged(bool)) );
+	connect(act, SIGNAL(triggered(bool)), this, SLOT(menuTileGridLinesChanged(bool)) );
 	showTileGridAct = act;
 
 	viewMenu->addAction(act);
 
+	// View -> Show Attr Grid
+	act = new QAction(tr("Show &Attr Grid"), this);
+	//act->setShortcut(QKeySequence::Open);
+	act->setCheckable(true);
+	act->setChecked(drawAttrGridLines);
+	act->setStatusTip(tr("Show Attr Grid"));
+	connect(act, SIGNAL(triggered(bool)), this, SLOT(menuAttrGridLinesChanged(bool)) );
+	showAttrGridAct = act;
+
+	viewMenu->addAction(act);
+
 	// View -> Show Attributes
-	act = new QAction(tr("Show Attributes"), this);
+	act = new QAction(tr("Show &Attributes"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setCheckable(true);
 	act->setChecked(attview);
@@ -181,7 +221,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	viewMenu->addAction(act);
 
 	// View -> Ignore Palette
-	act = new QAction(tr("Ignore Palette"), this);
+	act = new QAction(tr("&Ignore Palette"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setCheckable(true);
 	act->setChecked(attview);
@@ -192,7 +232,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	viewMenu->addAction(act);
 
 	// View -> Image Zoom
-	subMenu = viewMenu->addMenu( tr("Image Zoom"));
+	subMenu = viewMenu->addMenu( tr("Image &Zoom"));
 	group   = new QActionGroup(this);
 
 	group->setExclusive(true);
@@ -201,7 +241,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	{
 	        char stmp[8];
 
-	        sprintf( stmp, "%ix", i+1 );
+	        sprintf( stmp, "&%ix", i+1 );
 
 	        zoomAct[i] = new QAction(tr(stmp), this);
 	        zoomAct[i]->setCheckable(true);
@@ -218,8 +258,29 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 
 	viewMenu->addSeparator();
 
+	// View -> Tile Focus
+	subMenu = viewMenu->addMenu( tr("Tile &Focus"));
+	group   = new QActionGroup(this);
+
+	group->setExclusive(true);
+
+	focusAct[0] = new QAction(tr("&Click"), this);
+	focusAct[0]->setCheckable(true);
+	group->addAction(focusAct[0]);
+	subMenu->addAction(focusAct[0]);
+	connect(focusAct[0], SIGNAL(triggered()), this, SLOT(setClickFocus(void)) );
+
+	focusAct[1] = new QAction(tr("&Hover"), this);
+	focusAct[1]->setCheckable(true);
+	focusAct[1]->setChecked(false);
+	group->addAction(focusAct[1]);
+	subMenu->addAction(focusAct[1]);
+	connect(focusAct[1], SIGNAL(triggered()), this, SLOT(setHoverFocus(void)) );
+
+	viewMenu->addSeparator();
+
 	// View -> Refresh
-	act = new QAction(tr("Refresh"), this);
+	act = new QAction(tr("&Refresh"), this);
 	act->setShortcut( QKeySequence(tr("F5") ) );
 	act->setStatusTip(tr("Refresh"));
 	connect(act, SIGNAL(triggered()), this, SLOT(forceRefresh()) );
@@ -227,7 +288,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	viewMenu->addAction(act);
 
 	// View -> Auto Refresh Rate
-	subMenu = viewMenu->addMenu( tr("Auto Refresh Rate"));
+	subMenu = viewMenu->addMenu( tr("Auto &Refresh Rate"));
 	group   = new QActionGroup(this);
 
 	group->setExclusive(true);
@@ -265,10 +326,10 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	connect(rateAct[4], SIGNAL(triggered()), this, SLOT(changeRate16(void)) );
 
 	// Colors
-	colorMenu = menuBar->addMenu(tr("Colors"));
+	colorMenu = menuBar->addMenu(tr("&Colors"));
 
 	// Colors -> Tile Selector
-	act = new QAction(tr("Tile Selector"), this);
+	act = new QAction(tr("Tile &Selector"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setStatusTip(tr("Tile Selector"));
 	connect(act, SIGNAL(triggered()), this, SLOT(setTileSelectorColor()) );
@@ -276,7 +337,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	colorMenu->addAction(act);
 
 	// Colors -> Tile Grid
-	act = new QAction(tr("Tile Grid"), this);
+	act = new QAction(tr("Tile &Grid"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setStatusTip(tr("Tile Grid"));
 	connect(act, SIGNAL(triggered()), this, SLOT(setTileGridColor()) );
@@ -284,7 +345,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	colorMenu->addAction(act);
 
 	// Colors -> Attr Grid
-	act = new QAction(tr("Attr Grid"), this);
+	act = new QAction(tr("&Attr Grid"), this);
 	//act->setShortcut(QKeySequence::Open);
 	act->setStatusTip(tr("Attr Grid"));
 	connect(act, SIGNAL(triggered()), this, SLOT(setAttrGridColor()) );
@@ -294,6 +355,8 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	//-----------------------------------------------------------------------
 	// End Menu 
 	//-----------------------------------------------------------------------
+
+	cycleCount = 0;
 
 	setWindowTitle( tr("Name Table Viewer") );
 
@@ -305,6 +368,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 
 	vbox1  = new QVBoxLayout();
 	vbox2  = new QVBoxLayout();
+	vbox3  = new QVBoxLayout();
 	frame  = new QGroupBox( tr("Tile Info") );
 	ntView = new ppuNameTableView_t(this);
 	grid   = new QGridLayout();
@@ -325,7 +389,8 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	vbox1->addWidget( scrollArea, 100 );
 
 	vbox2->addWidget( frame );
-	frame->setLayout( grid );
+	frame->setLayout( vbox3 );
+	vbox3->addLayout( grid );
 
 	lbl = new QLabel( tr("PPU Addr:") );
 	lbl->setFont( font );
@@ -391,6 +456,12 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	palAddrLbl->setReadOnly(true);
 	grid->addWidget( palAddrLbl, 7, 1, Qt::AlignLeft );
 
+	selTileView = new ppuNameTableTileView_t(this);
+	selTilePalView = new ppuNameTablePaletteView_t(this);
+	//grid->addWidget( selTileView, 8, 0, 2, 1, Qt::AlignLeft );
+	vbox3->addWidget( selTileView );
+	vbox3->addWidget( selTilePalView );
+
 	showScrollLineCbox = new QCheckBox( tr("Show Scroll Lines") );
 	showTileGridCbox   = new QCheckBox( tr("Show Tile Grid") );
 	showAttrGridCbox   = new QCheckBox( tr("Show Attr Grid") );
@@ -403,6 +474,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	showAttrbCbox->setChecked( attview );
 	ignorePaletteCbox->setChecked( hidepal );
 
+	//vbox2->addWidget( selTileView );
 	vbox2->addWidget( showScrollLineCbox );
 	vbox2->addWidget( showTileGridCbox   );
 	vbox2->addWidget( showAttrGridCbox   );
@@ -429,19 +501,15 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 
 	hbox     = new QHBoxLayout();
 
-	scanLineEdit = new QLineEdit();
+	scanLineEdit = new QSpinBox();
+	scanLineEdit->setRange( 0, 255 );
+	scanLineEdit->setValue( NTViewScanline );
 	hbox->addWidget( new QLabel( tr("Display on Scanline:") ), 1, Qt::AlignRight );
 	hbox->addWidget( scanLineEdit, 1, Qt::AlignLeft );
 
 	hbox1->addLayout( hbox, 1 );
 
-	validator = new fceuDecIntValidtor( 0, 255, this );
-	scanLineEdit->setMaxLength( 3 );
-	scanLineEdit->setValidator( validator );
-	sprintf( stmp, "%i", NTViewScanline );
-	scanLineEdit->setText( tr(stmp) );
-
-	connect( scanLineEdit, SIGNAL(textEdited(const QString &)), this, SLOT(scanLineChanged(const QString &)));
+	connect( scanLineEdit, SIGNAL(valueChanged(int)), this, SLOT(scanLineChanged(int)));
 
 	FCEUD_UpdateNTView( -1, true);
 	
@@ -452,7 +520,7 @@ ppuNameTableViewerDialog_t::ppuNameTableViewerDialog_t(QWidget *parent)
 	updateTimer->start( 33 ); // 30hz
 
 	updateMirrorText();
-	updateVisibility();
+	refreshMenuSelections();
 }
 //----------------------------------------------------
 ppuNameTableViewerDialog_t::~ppuNameTableViewerDialog_t(void)
@@ -484,30 +552,78 @@ void ppuNameTableViewerDialog_t::periodicUpdate(void)
 
 	if ( redrawtables )
 	{
-		this->scrollArea->viewport()->update();
+		QPoint p;
+
+		p = ntView->getSelTile();
+
+		this->selTileView->setTile( ntView->getSelTable(), p.x(), p.y() );
+		this->selTileView->update();
+
+		this->selTilePalView->setTile( ntView->getSelTable(), p.x(), p.y() );
+		this->selTilePalView->update();
+
+		this->ntView->update();
+		//this->scrollArea->viewport()->update();
 
 		redrawtables = false;
 	}
+	else
+	{
+		if ( resetDrawCounter )
+		{
+			if ( cycleCount >= 4 )
+			{
+				cycleCount = 0;
+				resetDrawCounter = false;
+			}
+		}
+
+		if ( (cycleCount >= 0 ) && (cycleCount < 4) )
+		{
+			this->ntView->updateTable(cycleCount);
+		}
+	}
+
+	cycleCount = (cycleCount + 1) % 30;
+
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::changeZoom1x(void)
 {
 	ntView->setViewScale(1);
+
+	refreshMenuSelections();
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::changeZoom2x(void)
 {
 	ntView->setViewScale(2);
+
+	refreshMenuSelections();
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::changeZoom3x(void)
 {
 	ntView->setViewScale(3);
+
+	refreshMenuSelections();
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::changeZoom4x(void)
 {
 	ntView->setViewScale(4);
+
+	refreshMenuSelections();
+}
+//----------------------------------------------------
+void ppuNameTableViewerDialog_t::setClickFocus(void)
+{
+	ntView->setHoverFocus(false);
+}
+//----------------------------------------------------
+void ppuNameTableViewerDialog_t::setHoverFocus(void)
+{
+	ntView->setHoverFocus(true);
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::changeRate( int divider )
@@ -558,9 +674,21 @@ void ppuNameTableViewerDialog_t::forceRefresh(void)
 	FCEUD_UpdateNTView( -1, true);
 }
 //----------------------------------------------------
-void ppuNameTableViewerDialog_t::updateVisibility(void)
+void ppuNameTableViewerDialog_t::refreshMenuSelections(void)
 {
+	focusAct[0]->setChecked( !ntView->getHoverFocus() );
+	focusAct[1]->setChecked(  ntView->getHoverFocus() );
 
+	zoomAct[0]->setChecked( ntView->getViewScale() == 1 );
+	zoomAct[1]->setChecked( ntView->getViewScale() == 2 );
+	zoomAct[2]->setChecked( ntView->getViewScale() == 3 );
+	zoomAct[3]->setChecked( ntView->getViewScale() == 4 );
+
+	rateAct[0]->setChecked( NTViewRefresh == 0  );
+	rateAct[1]->setChecked( NTViewRefresh == 1  );
+	rateAct[2]->setChecked( NTViewRefresh == 3  );
+	rateAct[3]->setChecked( NTViewRefresh == 7  );
+	rateAct[4]->setChecked( NTViewRefresh == 19 );
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::setPropertyLabels( int TileID, int TileX, int TileY, int NameTable, int PPUAddress, int AttAddress, int Attrib, int palAddr )
@@ -629,21 +757,10 @@ void ppuNameTableViewerDialog_t::updateMirrorText(void)
 	mirrorLbl->setText( tr(txt) );
 }
 //----------------------------------------------------
-void ppuNameTableViewerDialog_t::scanLineChanged( const QString &txt )
+void ppuNameTableViewerDialog_t::scanLineChanged(int val)
 {
-	std::string s;
-
-	s = txt.toStdString();
-
-	if ( s.size() > 0 )
-	{
-		NTViewScanline = strtoul( s.c_str(), NULL, 10 );
-	}
-	else
-	{
-		NTViewScanline = 0;
-	}
-	//printf("ScanLine: '%s'  %i\n", s.c_str(), NTViewScanline );
+	NTViewScanline = val;
+	//printf("ScanLine:  %i\n", NTViewScanline );
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::menuScrollLinesChanged(bool checked)
@@ -653,11 +770,18 @@ void ppuNameTableViewerDialog_t::menuScrollLinesChanged(bool checked)
 	showScrollLineCbox->setChecked( checked );
 }
 //----------------------------------------------------
-void ppuNameTableViewerDialog_t::menuGridLinesChanged(bool checked)
+void ppuNameTableViewerDialog_t::menuTileGridLinesChanged(bool checked)
 {
 	drawTileGridLines = checked;
 
 	showTileGridCbox->setChecked( checked );
+}
+//----------------------------------------------------
+void ppuNameTableViewerDialog_t::menuAttrGridLinesChanged(bool checked)
+{
+	drawAttrGridLines = checked;
+
+	showAttrGridCbox->setChecked( checked );
 }
 //----------------------------------------------------
 void ppuNameTableViewerDialog_t::menuAttributesChanged(bool checked)
@@ -681,7 +805,6 @@ void ppuNameTableViewerDialog_t::openColorPicker( QColor *c )
 
 	dialog.setCurrentColor( *c );
 	dialog.setOption( QColorDialog::DontUseNativeDialog, true );
-	dialog.show();
 	ret = dialog.exec();
 
 	if ( ret == QDialog::Accepted )
@@ -729,7 +852,7 @@ void ppuNameTableViewerDialog_t::showAttrGridChanged(int state)
 {
 	drawAttrGridLines = (state != Qt::Unchecked);
 
-	//showAttrGridAct->setChecked( drawAttrGridLines );
+	showAttrGridAct->setChecked( drawAttrGridLines );
 
 	redrawtables = true;
 }
@@ -755,7 +878,7 @@ ppuNameTableView_t::ppuNameTableView_t(QWidget *parent)
 	this->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
 	this->setFocusPolicy(Qt::StrongFocus);
 	this->setMouseTracking(true);
-	viewScale = 2;
+	viewScale = 1;
 	viewWidth = 256 * 2 * viewScale;
 	viewHeight = 240 * 2 * viewScale;
 	setMinimumWidth( viewWidth );
@@ -766,8 +889,14 @@ ppuNameTableView_t::ppuNameTableView_t(QWidget *parent)
 
 	viewRect= QRect(0, 0, 512, 480);
 
-	selTable   = 0;
-	scrollArea = NULL;
+	selTable    = 0;
+	scrollArea  = NULL;
+	hover2Focus = false;
+	ensureVis   = false;
+	ppuAddr     = 0x2000;
+	palAddr     = 0x3F00;
+	atrbAddr    = 0x3F00;
+	tileAddr    = 0x0000;
 
 	tileSelColor.setRgb(255,255,255);
 	tileGridColor.setRgb(255,  0,  0);
@@ -782,6 +911,11 @@ ppuNameTableView_t::~ppuNameTableView_t(void)
 void ppuNameTableView_t::setScrollPointer( QScrollArea *sa )
 {
 	scrollArea = sa;
+}
+//----------------------------------------------------
+void ppuNameTableView_t::setHoverFocus( bool hoverFocus )
+{
+	hover2Focus = hoverFocus;
 }
 //----------------------------------------------------
 void ppuNameTableView_t::setViewScale( int reqScale )
@@ -830,6 +964,8 @@ void ppuNameTableView_t::setViewScale( int reqScale )
 	}
 
 	redrawtables = 1;
+
+	calcPixelLocations();
 }
 //----------------------------------------------------
 void ppuNameTableView_t::resizeEvent(QResizeEvent *event)
@@ -840,6 +976,8 @@ void ppuNameTableView_t::resizeEvent(QResizeEvent *event)
 	//printf("%ix%i\n", event->size().width(), event->size().height() );
 
 	redrawtables = 1;
+
+	calcPixelLocations();
 }
 //----------------------------------------------------
 int ppuNameTableView_t::convertXY2TableTile( int x, int y, int *tableIdxOut, int *tileXout, int *tileYout )
@@ -916,19 +1054,26 @@ int  ppuNameTableView_t::calcTableTileAddr( int NameTable, int TileX, int TileY 
 //----------------------------------------------------
 void ppuNameTableView_t::computeNameTableProperties( int NameTable, int TileX, int TileY )
 {
-	int TileID, PPUAddress, AttAddress, Attrib, palAddr;
+	int TileID, PPUAddress, AttAddress, Attrib, ptable = 0;
 
 	if ( vnapage[0] == NULL )
 	{
 		return;
 	}
+	if (PPU[0]&0x10){ //use the correct pattern table based on this bit
+		ptable=0x1000;
+	}
 
-	PPUAddress = 0x2000+(NameTable*0x400)+((TileY%30)*32)+(TileX%32);
+	ppuAddr = PPUAddress = 0x2000+(NameTable*0x400)+((TileY%30)*32)+(TileX%32);
 
 	TileID = vnapage[(PPUAddress>>10)&0x3][PPUAddress&0x3FF];
 
-	AttAddress = 0x23C0 | (PPUAddress & 0x0C00) | ((PPUAddress >> 4) & 0x38) | ((PPUAddress >> 2) & 0x07);
+	tileAddr = ptable | (TileID << 4);
+
+	atrbAddr = AttAddress = 0x23C0 | (PPUAddress & 0x0C00) | ((PPUAddress >> 4) & 0x38) | ((PPUAddress >> 2) & 0x07);
+
 	Attrib = vnapage[(AttAddress>>10)&0x3][AttAddress&0x3FF];
+
 	//Attrib = (Attrib >> ((PPUAddress&2) | ((PPUAddress&64)>>4))) & 0x3;
 
 	//palAddr = 0x3F00 + ( FCEUPPU_GetAttr( NameTable, TileX, TileY ) * 4 );
@@ -944,15 +1089,19 @@ void ppuNameTableView_t::computeNameTableProperties( int NameTable, int TileX, i
 //----------------------------------------------------
 void ppuNameTableView_t::keyPressEvent(QKeyEvent *event)
 {
-	if ( event->key() == Qt::Key_Minus )
+	if ( (event->key() == Qt::Key_Minus) || (event->key() == Qt::Key_Underscore) )
 	{
 		setViewScale( viewScale-1 );
 
+		parent->refreshMenuSelections();
+
 		event->accept();
 	}
-	else if ( event->key() == Qt::Key_Plus )
+	else if ( (event->key() == Qt::Key_Plus) || (event->key() == Qt::Key_Equal) )
 	{
 		setViewScale( viewScale+1 );
+
+		parent->refreshMenuSelections();
 
 		event->accept();
 	}
@@ -979,6 +1128,7 @@ void ppuNameTableView_t::keyPressEvent(QKeyEvent *event)
 		computeNameTableProperties( selTable, selTile.x(), selTile.y() );
 
 		ensureVis = true;
+		redrawtables = true;
 
 		event->accept();
 	}
@@ -1005,6 +1155,7 @@ void ppuNameTableView_t::keyPressEvent(QKeyEvent *event)
 		computeNameTableProperties( selTable, selTile.x(), selTile.y() );
 
 		ensureVis = true;
+		redrawtables = true;
 
 		event->accept();
 	}
@@ -1031,6 +1182,7 @@ void ppuNameTableView_t::keyPressEvent(QKeyEvent *event)
 		computeNameTableProperties( selTable, selTile.x(), selTile.y() );
 
 		ensureVis = true;
+		redrawtables = true;
 
 		event->accept();
 	}
@@ -1057,6 +1209,7 @@ void ppuNameTableView_t::keyPressEvent(QKeyEvent *event)
 		computeNameTableProperties( selTable, selTile.x(), selTile.y() );
 
 		ensureVis = true;
+		redrawtables = true;
 
 		event->accept();
 	}
@@ -1064,6 +1217,20 @@ void ppuNameTableView_t::keyPressEvent(QKeyEvent *event)
 //----------------------------------------------------
 void ppuNameTableView_t::mouseMoveEvent(QMouseEvent *event)
 {
+	if ( hover2Focus )
+	{
+		int tIdx, tx, ty;
+
+		convertXY2TableTile( event->pos().x(), event->pos().y(), &tIdx, &tx, &ty );
+
+		selTable = tIdx;
+		selTile.setX( tx );
+		selTile.setY( ty );
+
+		computeNameTableProperties( tIdx, tx, ty );
+
+		redrawtables = true;
+	}
 	//printf("MouseMove: (%i,%i) \n", event->pos().x(), event->pos().y() );
 }
 //----------------------------------------------------------------------------
@@ -1085,20 +1252,101 @@ void ppuNameTableView_t::mousePressEvent(QMouseEvent * event)
 	else if ( event->button() == Qt::RightButton )
 	{
 	}
+	redrawtables = true;
 }
 //----------------------------------------------------
-void ppuNameTableView_t::paintEvent(QPaintEvent *event)
+void ppuNameTableView_t::contextMenuEvent(QContextMenuEvent *event)
+{
+	QAction *act;
+	QMenu menu(this);
+	//QMenu *subMenu;
+	//QActionGroup *group;
+	char stmp[128];
+	int tIdx, tx, ty;
+
+	convertXY2TableTile( event->pos().x(), event->pos().y(), &tIdx, &tx, &ty );
+
+	selTable = tIdx;
+	selTile.setX( tx );
+	selTile.setY( ty );
+
+	redrawtables = true;
+
+	sprintf( stmp, "Open Tile $%04X in PPU &Viewer", tileAddr );
+	act = new QAction(tr(stmp), &menu);
+	//act->setShortcut( QKeySequence(tr("V")));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openTilePpuViewer(void)) );
+	menu.addAction( act );
+
+	sprintf( stmp, "Open &Tile Addr $%04X in Hex Editor", tileAddr );
+	act = new QAction(tr(stmp), &menu);
+	//act->setShortcut( QKeySequence(tr("H")));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openTileAddrHexEdit(void)) );
+	menu.addAction( act );
+
+	sprintf( stmp, "Open &Attr Addr $%04X in Hex Editor", atrbAddr );
+	act = new QAction(tr(stmp), &menu);
+	//act->setShortcut( QKeySequence(tr("H")));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openAtrbAddrHexEdit(void)) );
+	menu.addAction( act );
+
+	sprintf( stmp, "Open &PPU Addr $%04X in Hex Editor", ppuAddr );
+	act = new QAction(tr(stmp), &menu);
+	//act->setShortcut( QKeySequence(tr("H")));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openPpuAddrHexEdit(void)) );
+	menu.addAction( act );
+
+	menu.exec(event->globalPos());
+
+}
+//----------------------------------------------------
+void ppuNameTableView_t::openTilePpuViewer(void)
+{
+	int pTable,x,y;
+
+	pTable = tileAddr >= 0x1000;
+	y = (tileAddr & 0x0F00) >> 8;
+	x = (tileAddr & 0x00F0) >> 4;
+
+	openPPUViewWindow( consoleWindow );
+
+	//printf("TileAddr: %04X   %i,%X%X\n", tileAddr, pTable, x, y );
+
+	setPPUSelPatternTile(  pTable,  x,  y );
+	setPPUSelPatternTile( !pTable, -1, -1 );
+}
+//----------------------------------------------------
+void ppuNameTableView_t::openTileAddrHexEdit(void)
+{
+	hexEditorOpenFromDebugger( QHexEdit::MODE_NES_PPU, tileAddr );
+}
+//----------------------------------------------------
+void ppuNameTableView_t::openAtrbAddrHexEdit(void)
+{
+	hexEditorOpenFromDebugger( QHexEdit::MODE_NES_PPU, atrbAddr );
+}
+//----------------------------------------------------
+void ppuNameTableView_t::openPpuAddrHexEdit(void)
+{
+	hexEditorOpenFromDebugger( QHexEdit::MODE_NES_PPU, ppuAddr );
+}
+//----------------------------------------------------
+void ppuNameTableView_t::updateTable(int idx)
 {
 	ppuNameTable_t *nt;
-	int n,i,j,ii,jj,w,h,x,y,xx,yy,ww,hh;
-	QPainter painter(this);
-	QColor scanLineColor(255,255,255);
-	QPen   pen;
-	
-	viewRect = event->rect();
+
+	nt = &nameTable[idx];
+
+	this->update( nt->x, nt->y, nt->w*256, nt->h*240 );
+}
+//----------------------------------------------------
+void ppuNameTableView_t::calcPixelLocations(void)
+{
+	ppuNameTable_t *nt;
+	int n,i,j,ii,jj,w,h,x,y,xx,yy;
 
 	w = viewWidth / (256*2);
-  	h = viewHeight / (240*2);
+	h = viewHeight / (240*2);
 
 	//printf("(%i,%i) %ix%i\n", event->rect().x(), event->rect().y(), event->rect().width(), event->rect().height() );
 
@@ -1109,18 +1357,18 @@ void ppuNameTableView_t::paintEvent(QPaintEvent *event)
 		nt = &nameTable[n];
 
 		nt->w = w; nt->h = h;
-		
+
 		nt->x = xx = (n%2) * (viewWidth / 2);
 		nt->y = yy = (n/2) * (viewHeight / 2);
 
+		jj = 0;
+
 		for (j=0; j<30; j++)
 		{
-			jj = (j*8);
+			ii = 0;
 
 			for (i=0; i<32; i++)
 			{
-				ii = (i*8);
-
 				nt->tile[j][i].x = xx+(ii*w);
 				nt->tile[j][i].y = yy+(jj*h);
 
@@ -1128,15 +1376,76 @@ void ppuNameTableView_t::paintEvent(QPaintEvent *event)
 				{
 					for (x=0; x<8; x++)
 					{
-						painter.fillRect( xx+(ii+x)*w, yy+(jj+y)*h, w, h, nt->tile[j][i].pixel[y][x].color );
+						nt->tile[j][i].pixel[y][x].x = xx+(ii+x)*w;
+						nt->tile[j][i].pixel[y][x].y = yy+(jj+y)*h;
+					}
+				}
+				ii += 8;
+			}
+			jj += 8;
+		}
+	}
+}
+//----------------------------------------------------
+void ppuNameTableView_t::paintEvent(QPaintEvent *event)
+{
+	ppuNameTable_t *nt;
+	int n,i,j,w,h,x,y,xx,yy,ww,hh;
+	QPainter painter(this);
+	QColor scanLineColor(255,255,255);
+	QPen   pen;
+	QRect  pixelRect;
+	
+	viewRect = event->rect();
+
+	w = viewWidth / (256*2);
+  	h = viewHeight / (240*2);
+
+	//printf("(%i,%i) %ix%i\n", event->rect().x(), event->rect().y(), event->rect().width(), event->rect().height() );
+
+	xx = 0; yy = 0; 
+	ww = w*256;
+	hh = h*240;
+
+	for (n=0; n<4; n++)
+	{
+		nt = &nameTable[n];
+
+		nt->w = w; nt->h = h;
+		
+		nt->x = xx = (n%2) * (viewWidth / 2);
+		nt->y = yy = (n/2) * (viewHeight / 2);
+
+		pixelRect.setRect( xx, yy, ww, hh );
+
+		if ( !viewRect.intersects( pixelRect ) )
+		{
+			//printf("Table:%i Not in View\n", n);
+			continue;
+
+		}
+		for (j=0; j<30; j++)
+		{
+			for (i=0; i<32; i++)
+			{
+				for (y=0; y<8; y++)
+				{
+					for (x=0; x<8; x++)
+					{
+						pixelRect.setRect( nt->tile[j][i].pixel[y][x].x, nt->tile[j][i].pixel[y][x].y, w, h );
+
+						if ( viewRect.intersects( pixelRect ) )
+						{
+						   painter.fillRect( nt->tile[j][i].pixel[y][x].x, nt->tile[j][i].pixel[y][x].y, w, h, nt->tile[j][i].pixel[y][x].color );
+						}
 					}
 				}
 			}
 		}
 		if ( drawScrollLines )
 		{
-			ww = nt->w * 256;
-			hh = nt->h * 240;
+			//ww = nt->w * 256;
+			//hh = nt->h * 240;
 
 			painter.setPen( scanLineColor );
 
@@ -1267,6 +1576,8 @@ inline void DrawChr( ppuNameTableTile_t *tile, const uint8_t *chr, int pal)
 	uint8 chr0, chr1;
 	//uint8 *table = &VPage[0][0]; //use the background table
 	//pbitmap += 3*
+	//
+	tile->pal  = pal;
 
 	for (y = 0; y < 8; y++) { //todo: use index for y?
 		chr0 = chr[index];
@@ -1355,6 +1666,9 @@ static void DrawNameTable(int scanline, int ntnum, bool invalidateCache)
 				const uint8* chrp = FCEUPPU_GetCHR(ptable+chr,refreshaddr);
 				if (attview) chrp = ATTRIBUTE_VIEW_TILE;
 
+				nameTable[ntnum].tile[y][x].pTbl    = ptable;
+				nameTable[ntnum].tile[y][x].pTblAdr = ptable+chr;
+
 				//a good way to do it:
 				DrawChr( &nameTable[ntnum].tile[y][x], chrp, a);
 
@@ -1430,7 +1744,239 @@ void FCEUD_UpdateNTView(int scanline, bool drawall)
 	}
 
 	chrchanged = 0;
-	redrawtables = true;
+	resetDrawCounter = true;
 	return;	
+}
+//----------------------------------------------------
+ppuNameTableTileView_t::ppuNameTableTileView_t( QWidget *parent )
+	: QWidget(parent)
+{
+	//this->setFocusPolicy(Qt::StrongFocus);
+	//this->setMouseTracking(true);
+	this->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
+
+	viewWidth = 128;
+	viewHeight = 128;
+	setMinimumWidth( viewWidth );
+	setMinimumHeight( viewHeight );
+
+	selTable = 0;
+	tileX = 0;
+	tileY = 0;
+}
+//----------------------------------------------------
+ppuNameTableTileView_t::~ppuNameTableTileView_t(void)
+{
+
+}
+//----------------------------------------------------
+void ppuNameTableTileView_t::setTile( int table, int x, int y )
+{
+	selTable = table;
+	tileX = x; tileY = y;
+}
+//----------------------------------------------------
+void ppuNameTableTileView_t::resizeEvent(QResizeEvent *event)
+{
+	viewWidth  = event->size().width();
+	viewHeight = event->size().height();
+}
+//----------------------------------------------------
+void ppuNameTableTileView_t::paintEvent(QPaintEvent *event)
+{
+	int x,y,w,h,xx,yy;
+	QPainter painter(this);
+	QPen     pen;
+	ppuNameTableTile_t *tile;
+
+	pen = painter.pen();
+
+	viewWidth  = event->rect().width();
+	viewHeight = event->rect().height();
+
+	//printf("NameTable TileView %ix%i \n", viewWidth, viewHeight );
+	
+	w = viewWidth / 8;
+  	h = viewHeight / 8;
+
+	if ( w < h )
+	{
+	   h = w;
+	}
+	else
+	{
+	   w = h;
+	}
+	
+	xx = 0;
+
+	tile = &nameTable[ selTable ].tile[ tileY ][ tileX ];
+
+	// Draw Tile Pixels as rectangles
+	for (x=0; x < 8; x++)
+	{
+		yy = 0;
+	
+		for (y=0; y < 8; y++)
+		{
+			painter.fillRect( xx, yy, w, h, tile->pixel[y][x].color );
+			yy += h;
+		}
+		xx += w;
+	}
+	
+	//if ( drawTileGrid )
+	//{
+	//	pen.setWidth( 1 );
+	//	pen.setColor( QColor(128,128,128) );
+	//	painter.setPen( pen );
+
+	//	// Draw Tile Pixel grid lines
+	//	xx = 0; y = 8*h;
+	//	
+	//	for (x=0; x<9; x++)
+	//	{
+	//	           painter.drawLine( xx, 0 , xx, y ); xx += w;
+	//	}
+	//	yy = 0; x = 8*w;
+	//	
+	//	for (y=0; y<9; y++)
+	//	{
+	//	           painter.drawLine( 0, yy , x, yy ); yy += h;
+	//	}
+	//}
+
+	//x = selPix.x() * w;
+	//y = selPix.y() * h;
+
+	//pen.setWidth( 6 );
+	//pen.setColor( QColor(  0,  0,  0) );
+	//painter.setPen( pen );
+
+	//painter.drawRect( x, y, w, h );
+
+	//pen.setWidth( 2 );
+	//pen.setColor( QColor(255,  0,  0) );
+	//painter.setPen( pen );
+
+	//painter.drawRect( x, y, w, h );
+}
+//----------------------------------------------------
+//-- Name Table Tile Palette View
+//----------------------------------------------------
+ppuNameTablePaletteView_t::ppuNameTablePaletteView_t(QWidget *parent)
+	: QWidget(parent)
+{
+	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	viewHeight = 32;
+	viewWidth = viewHeight*4;
+	setMinimumWidth( viewWidth );
+	setMinimumHeight( viewHeight );
+
+	selTable = 0;
+	tileX = 0;
+	tileY = 0;
+}
+//----------------------------------------------------
+ppuNameTablePaletteView_t::~ppuNameTablePaletteView_t(void)
+{
+
+}
+//----------------------------------------------------
+void ppuNameTablePaletteView_t::setTile( int table, int x, int y )
+{
+	selTable = table;
+	tileX = x; tileY = y;
+}
+//----------------------------------------------------
+int  ppuNameTablePaletteView_t::heightForWidth(int w) const
+{
+	return w/4;
+}
+//----------------------------------------------------
+QSize ppuNameTablePaletteView_t::minimumSizeHint(void) const
+{
+	return QSize(48,12);
+}
+//----------------------------------------------------
+QSize ppuNameTablePaletteView_t::maximumSizeHint(void) const
+{
+	return QSize(256,64);
+}
+//----------------------------------------------------
+QSize ppuNameTablePaletteView_t::sizeHint(void) const
+{
+	return QSize(128,32);
+}
+//----------------------------------------------------
+void ppuNameTablePaletteView_t::resizeEvent(QResizeEvent *event)
+{
+	viewWidth  = event->size().width();
+	viewHeight = event->size().height();
+}
+//----------------------------------------------------
+void ppuNameTablePaletteView_t::paintEvent(QPaintEvent *event)
+{
+	int x,w,h,xx,yy,p,p2,i,j;
+	QPainter painter(this);
+	QColor color( 0, 0, 0);
+	QColor  white(255,255,255), black(0,0,0);
+	ppuNameTableTile_t *tile;
+	//QPen pen;
+	//char showSelector;
+	char c[4];
+
+	//pen = painter.pen();
+
+	viewWidth  = event->rect().width();
+	viewHeight = event->rect().height();
+
+	w = viewWidth  / 4;
+  	h = viewHeight;
+
+	if ( w < h )
+	{
+		h = w;
+	}
+	else
+	{
+		w = h;
+	}
+
+	i = w / 4;
+	j = h / 4;
+
+	tile = &nameTable[ selTable ].tile[ tileY ][ tileX ];
+
+	p2 = tile->pal * 4;
+	yy = 0;
+	xx = 0;
+	for (x=0; x < 4; x++)
+	{
+		if ( palo != NULL )
+		{
+			p = palcache[p2 | x];
+			color.setBlue( palo[p].b );
+			color.setGreen( palo[p].g );
+			color.setRed( palo[p].r );
+
+			c[0] = conv2hex( (p & 0xF0) >> 4 );
+			c[1] = conv2hex(  p & 0x0F);
+			c[2] =  0;
+		}
+		painter.fillRect( xx, yy, w, h, color );
+
+		if ( qGray( color.red(), color.green(), color.blue() ) > 128 )
+		{
+			painter.setPen( black );
+		}
+		else
+		{
+			painter.setPen( white );
+		}
+		painter.drawText( xx+i, yy+h-j, tr(c) );
+
+		xx += w;
+	}
 }
 //----------------------------------------------------

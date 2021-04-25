@@ -17,6 +17,7 @@ extern int postrenderscanlines;
 extern int vblankscanlines;
 
 extern bool AutoResumePlay;
+extern bool frameAdvanceLagSkip;
 extern char romNameWhenClosingEmulator[];
 
 #define DECLFR(x) uint8 x (uint32 A)
@@ -43,7 +44,7 @@ void AutoFire(void);
 void FCEUI_RewindToLastAutosave(void);
 
 //mbg 7/23/06
-char *FCEUI_GetAboutString();
+const char *FCEUI_GetAboutString(void);
 
 extern uint64 timestampbase;
 
@@ -70,6 +71,7 @@ extern uint8 qtaintramreg;
 extern  uint8  *RAM;            //shared memory modifications
 extern int EmulationPaused;
 extern int frameAdvance_Delay;
+extern int RAMInitOption;
 
 uint8 FCEU_ReadRomByte(uint32 i);
 void FCEU_WriteRomByte(uint32 i, uint8 value);
@@ -98,7 +100,7 @@ extern bool movieSubtitles;
 
 //#include "driver.h"
 
-typedef struct {
+typedef struct fceu_settings_struct {
 	int PAL;
 	int NetworkPlay;
 	int SoundVolume;		//Master volume

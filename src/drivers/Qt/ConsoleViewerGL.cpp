@@ -24,9 +24,17 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef WIN32
+#include <windows.h>
+#endif
+
 #include <QApplication>
 #include <QScreen>
 #include <QMouseEvent>
+
+#if defined(QT_OPENGL_ES) || defined(QT_OPENGL_ES_2)
+#include <GL/gl.h>
+#endif
 
 #include "Qt/nes_shm.h"
 #include "Qt/fceuWrapper.h"
@@ -42,8 +50,11 @@ ConsoleViewGL_t::ConsoleViewGL_t(QWidget *parent)
 	view_height = 0;
 	gltexture   = 0;
 	devPixRatio = 1.0f;
+	aspectRatio = 1.0f;
+	aspectX     = 1.0f;
+	aspectY     = 1.0f;
 	linearFilter = false;
-	sqrPixels    = true;
+	forceAspect  = true;
 	autoScaleEna = true;
 	xscale = 2.0;
 	yscale = 2.0;
@@ -52,8 +63,9 @@ ConsoleViewGL_t::ConsoleViewGL_t(QWidget *parent)
 	rh = 240;
 	mouseButtonMask = 0;
 
-	setMinimumWidth( GL_NES_WIDTH );
-	setMinimumHeight( GL_NES_HEIGHT );
+	setMinimumWidth( 256 );
+	setMinimumHeight( 224 );
+	setFocusPolicy(Qt::StrongFocus);
 
 	QScreen *screen = QGuiApplication::primaryScreen();
 
@@ -91,20 +103,6 @@ ConsoleViewGL_t::ConsoleViewGL_t(QWidget *parent)
 
 ConsoleViewGL_t::~ConsoleViewGL_t(void)
 {
-	// Make sure the context is current and then explicitly
-    // destroy all underlying OpenGL resources.
-    makeCurrent();
-
-	 // Free GL texture
-	 if (gltexture) 
-	 {
-	 	//printf("Destroying GL Texture\n");
-	 	glDeleteTextures(1, &gltexture);
-	 	gltexture=0;
-	 }
-
-	 doneCurrent();
-
 	if ( localBuf )
 	{
 		free( localBuf ); localBuf = NULL;
@@ -148,15 +146,36 @@ void ConsoleViewGL_t::buildTextures(void)
 
 void ConsoleViewGL_t::initializeGL(void)
 {
+	//printf("initializeGL\n");
 
-	 initializeOpenGLFunctions();
-    // Set up the rendering context, load shaders and other resources, etc.:
-    //QOpenGLFunctions *gl = QOpenGLContext::currentContext()->functions();
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	initializeOpenGLFunctions();
+	// Set up the rendering context, load shaders and other resources, etc.:
+	//QOpenGLFunctions *gl = QOpenGLContext::currentContext()->functions();
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	 //printf("GL Init!\n");
 
 	 buildTextures();
+
+	 connect(context(), &QOpenGLContext::aboutToBeDestroyed, this, &ConsoleViewGL_t::cleanupGL);
+}
+
+void ConsoleViewGL_t::cleanupGL(void)
+{
+	//printf("cleanupGL\n");
+	// Make sure the context is current and then explicitly
+	// destroy all underlying OpenGL resources.
+	makeCurrent();
+
+	 // Free GL texture
+	 if (gltexture) 
+	 {
+	 	//printf("Destroying GL Texture\n");
+	 	glDeleteTextures(1, &gltexture);
+	 	gltexture=0;
+	 }
+
+	 doneCurrent();
 }
 
 void ConsoleViewGL_t::resizeGL(int w, int h)
@@ -192,7 +211,7 @@ void ConsoleViewGL_t::setScaleXY( double xs, double ys )
 	xscale = xs;
 	yscale = ys;
 
-	if ( sqrPixels )
+	if ( forceAspect )
 	{
 		if ( (xscale*xyRatio) < yscale )
 		{
@@ -205,11 +224,30 @@ void ConsoleViewGL_t::setScaleXY( double xs, double ys )
 	}
 }
 
+void ConsoleViewGL_t::setAspectXY( double x, double y )
+{
+	aspectX = x;
+	aspectY = y;
+
+	aspectRatio = aspectY / aspectX;
+}
+
+void ConsoleViewGL_t::getAspectXY( double &x, double &y )
+{
+	x = aspectX;
+	y = aspectY;
+}
+
+double ConsoleViewGL_t::getAspectRatio(void)
+{
+	return aspectRatio;
+}
+
 void ConsoleViewGL_t::transfer2LocalBuffer(void)
 {
 	int i=0, hq = 0;
 	int numPixels = nes_shm->video.ncol * nes_shm->video.nrow;
-	int cpSize = numPixels * 4;
+	unsigned int cpSize = numPixels * 4;
  	uint8_t *src, *dest;
 
 	if ( cpSize > localBufSize )
@@ -305,15 +343,15 @@ void ConsoleViewGL_t::paintGL(void)
 	float xscaleTmp = (float)(view_width)  / (float)(texture_width);
 	float yscaleTmp = (float)(view_height) / (float)(texture_height);
 
-	if ( sqrPixels )
+	if ( forceAspect )
 	{
 		if ( (xscaleTmp*xyRatio) < yscaleTmp )
 		{
-			yscaleTmp = (xscaleTmp*xyRatio);
+			yscaleTmp = xscaleTmp * xyRatio;
 		}
 		else 
 		{
-			xscaleTmp = (yscaleTmp/xyRatio);
+			xscaleTmp = yscaleTmp / xyRatio;
 		}
 	}
 
@@ -333,8 +371,45 @@ void ConsoleViewGL_t::paintGL(void)
 			yscaleTmp = yscale;
 		}
 	}
+
 	rw=(int)((r-l)*xscaleTmp);
 	rh=(int)((b-t)*yscaleTmp);
+
+	if ( forceAspect )
+	{
+		int iw, ih, ax, ay;
+
+		ax = (int)(aspectX+0.50);
+		ay = (int)(aspectY+0.50);
+
+		iw = rw * ay;
+		ih = rh * ax;
+		
+		if ( iw > ih )
+		{
+			rh = (rw * ay) / ax;
+		}
+		else
+		{
+			rw = (rh * ax) / ay;
+		}
+
+		if ( rw > view_width )
+		{
+			rw = view_width;
+			rh = (rw * ay) / ax;
+		}
+
+		if ( rh > view_height )
+		{
+			rh = view_height;
+			rw = (rh * ax) / ay;
+		}
+	}
+
+	if ( rw > view_width ) rw = view_width;
+	if ( rh > view_height) rh = view_height;
+
 	sx=(view_width-rw)/2;   
 	sy=(view_height-rh)/2;
 

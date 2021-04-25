@@ -37,7 +37,7 @@
 #include "fceulua.h"
 #endif
 
-#ifdef WIN32
+#ifdef __WIN_DRIVER__
 #include "drivers/win/common.h" //For DirectX constants
 #include "drivers/win/input.h"
 #endif
@@ -87,23 +87,23 @@ std::string FCEUI_GetSnapshotAsName() { return AsSnapshotName; }
 
 void FCEU_KillVirtualVideo(void)
 {
-	//mbg merge TODO 7/17/06 temporarily removed
-	//if(xbsave)
-	//{
-	// free(xbsave);
-	// xbsave=0;
-	//}
-	//if(XBuf)
-	//{
-	//UnmapViewOfFile(XBuf);
-	//CloseHandle(mapXBuf);
-	//mapXBuf=NULL;
-	//}
-	//if(XBackBuf)
-	//{
-	// free(XBackBuf);
-	// XBackBuf=0;
-	//}
+	if ( XBuf )
+	{
+		FCEU_free(XBuf); XBuf = NULL;
+	}
+	if ( XBackBuf )
+	{
+		FCEU_free(XBackBuf); XBackBuf = NULL;
+	}
+	if ( XDBuf )
+	{
+		FCEU_free(XDBuf); XDBuf = NULL;
+	}
+	if ( XDBackBuf )
+	{
+		FCEU_free(XDBackBuf); XDBackBuf = NULL;
+	}
+	//printf("Video Core Cleanup\n");
 }
 
 /**
@@ -271,7 +271,6 @@ void FCEU_PutImage(void)
 	//Fancy input display code
 	if(input_display)
 	{
-		extern uint32 JSAutoHeld;
 		int i, j;
 		uint8 *t = XBuf+(FSettings.LastSLine-9)*256 + 20;		//mbg merge 7/17/06 changed t to uint8*
 		if(input_display > 4) input_display = 4;
@@ -289,7 +288,8 @@ void FCEU_PutImage(void)
 			uint32 ci = 0;
 			uint32 color;
 
-#ifdef WIN32
+#ifdef __WIN_DRIVER__
+			extern uint32 JSAutoHeld;
 			// This doesn't work in anything except windows for now.
 			// It doesn't get set anywhere in other ports.
 			if (!oldInputDisplay)

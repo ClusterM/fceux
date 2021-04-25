@@ -53,6 +53,7 @@
 #include "../../fceulua.h"
 #endif
 
+#include "common/os_utils.h"
 #include "common/configSys.h"
 #include "../../oldmovie.h"
 #include "../../types.h"
@@ -61,6 +62,11 @@
 #include "../videolog/nesvideos-piece.h"
 #endif
 
+#ifdef _MSC_VER 
+//not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
+#define strncasecmp _strnicmp
+#define strcasecmp _stricmp
+#endif
 //*****************************************************************
 // Define Global Variables to be shared with FCEU Core
 //*****************************************************************
@@ -89,7 +95,7 @@ static int periodic_saves = 0;
 static int   mutexLocks = 0;
 static int   mutexPending = 0;
 static bool  emulatorHasMutux = 0;
-static unsigned int emulatorCycleCount = 0;
+unsigned int emulatorCycleCount = 0;
 
 extern double g_fpsScale;
 
@@ -136,13 +142,17 @@ EMUFILE_FILE* FCEUD_UTF8_fstream(const char *fn, const char *m)
 	//return new std::fstream(fn,mode);
 }
 
-static const char *s_linuxCompilerString = "g++ " __VERSION__;
+#ifdef _MSC_VER
+static const char *s_CompilerString = "MSVC";
+#else
+static const char *s_CompilerString = "g++ " __VERSION__;
+#endif
 /**
  * Returns the compiler string.
  */
 const char *FCEUD_GetCompilerString(void)
 {
-	return s_linuxCompilerString;
+	return s_CompilerString;
 }
 
 /**
@@ -252,8 +262,17 @@ int LoadGame(const char *path, bool silent)
 
 	FCEUI_SetGameGenie (gg_enabled);
 
+	// Set RAM Init Method Prior to Loading New Game
+	g_config->getOption ("SDL.RamInitMethod", &RAMInitOption);
+
+	// Load the game
 	if(!FCEUI_LoadGame(fullpath, 1, silent)) {
 		return 0;
+	}
+
+	if ( consoleWindow )
+	{
+		consoleWindow->addRecentRom( fullpath );
 	}
 
 	hexEditorLoadBookmarks();
@@ -298,9 +317,43 @@ int LoadGame(const char *path, bool silent)
 	}
 	
 	// set pal/ntsc
-	int id;
-	g_config->getOption("SDL.PAL", &id);
-	FCEUI_SetRegion(id);
+	int id, region, autoDetectPAL;
+	g_config->getOption("SDL.PAL", &region);
+	g_config->getOption("SDL.AutoDetectPAL", &autoDetectPAL);
+
+	if ( autoDetectPAL )
+	{
+		id = FCEUI_GetCurrentVidSystem(NULL, NULL);
+
+		if ( region == 2 )
+		{	// Dendy mode:
+			//   Run PAL Games as PAL
+			//   Run NTSC Games as Dendy
+			if ( id == 1 )
+			{
+				g_config->setOption("SDL.PAL", id);
+				FCEUI_SetRegion(id);
+			}
+			else
+			{
+				FCEUI_SetRegion(region);
+			}
+		}
+		else
+		{	// Run NTSC games as NTSC and PAL games as PAL
+			g_config->setOption("SDL.PAL", id);
+			FCEUI_SetRegion(id);
+		}
+	}
+	else
+	{
+		// If not Auto-detection of region,
+		// Strictly enforce region GUI selection
+		// Does not matter what type of game is 
+		// loaded, the current region selection is used 
+		FCEUI_SetRegion(region);
+	}
+
 
 	g_config->getOption("SDL.SwapDuty", &id);
 	swapDuty = id;
@@ -314,7 +367,7 @@ int LoadGame(const char *path, bool silent)
 	}
 	isloaded = 1;
 
-	FCEUD_NetworkConnect();
+	//FCEUD_NetworkConnect();
 	return 1;
 }
 
@@ -378,12 +431,27 @@ int  fceuWrapperSoftReset(void)
 
 int  fceuWrapperHardReset(void)
 {
-	if ( isloaded )
+	if ( isloaded && GameInfo )
 	{
-		std::string lastFile;
-		CloseGame();
-		g_config->getOption ("SDL.LastOpenFile", &lastFile);
-		LoadGame (lastFile.c_str());
+		char romPath[2048];
+
+		romPath[0] = 0;
+
+		if ( GameInfo->archiveFilename )
+		{
+			strcpy( romPath, GameInfo->archiveFilename );
+		}
+		else if ( GameInfo->filename )
+		{
+			strcpy( romPath, GameInfo->filename );
+		}
+
+		if ( romPath[0] != 0 )
+		{
+			CloseGame();
+			//printf("Loading: '%s'\n", romPath );
+			LoadGame ( romPath );
+		}
 	}
 	return 0;
 }
@@ -851,6 +919,20 @@ int  fceuWrapperClose( void )
 	return 0;
 }
 
+int  fceuWrapperMemoryCleanup(void)
+{
+	FreeCDLog();
+
+	close_nes_shm();
+
+	if ( g_config )
+	{
+		delete g_config; g_config = NULL;
+	}
+
+	return 0;
+}
+
 /**
  * Update the video, audio, and input subsystems with the provided
  * video (XBuf) and audio (Buffer) information.
@@ -861,7 +943,7 @@ FCEUD_Update(uint8 *XBuf,
 			 int Count)
 {
 	int blitDone = 0;
-	extern int FCEUDnetplay;
+	//extern int FCEUDnetplay;
 
 	#ifdef CREATE_AVI
 	if (LoggingEnabled == 2 || (eoptions&EO_NOTHROTTLE))
@@ -955,19 +1037,19 @@ FCEUD_Update(uint8 *XBuf,
 				}
 			}
 		} //else puts("Skipped");
-		else if (!NoWaiting && FCEUDnetplay && (uflow || tmpcan >= (Count * 1.8))) 
-		{
-			if (Count > tmpcan) Count=tmpcan;
-			while(tmpcan > 0) 
-			{
-				//	printf("Overwrite: %d\n", (Count <= tmpcan)?Count : tmpcan);
-				#ifdef CREATE_AVI
-				if (!mutecapture)
-				#endif
-				  WriteSound(Buffer, (Count <= tmpcan)?Count : tmpcan);
-				tmpcan -= Count;
-			}
-		}
+		//else if (!NoWaiting && FCEUDnetplay && (uflow || tmpcan >= (Count * 1.8))) 
+		//{
+		//	if (Count > tmpcan) Count=tmpcan;
+		//	while(tmpcan > 0) 
+		//	{
+		//		//	printf("Overwrite: %d\n", (Count <= tmpcan)?Count : tmpcan);
+		//		#ifdef CREATE_AVI
+		//		if (!mutecapture)
+		//		#endif
+		//		  WriteSound(Buffer, (Count <= tmpcan)?Count : tmpcan);
+		//		tmpcan -= Count;
+		//	}
+		//}
 	}
   	else 
 	{
@@ -1076,7 +1158,7 @@ int  fceuWrapperUpdate( void )
 	// sleep to allow request to be serviced.
 	if ( mutexPending > 0 )
 	{
-		usleep( 100000 );
+		msleep( 100 );
 	}
 
 	lock_acq = fceuWrapperTryLock();
@@ -1087,7 +1169,7 @@ int  fceuWrapperUpdate( void )
 		{
 			printf("Error: Emulator Failed to Acquire Mutex\n");
 		}
-		usleep( 100000 );
+		msleep( 100 );
 
 		return -1;
 	}
@@ -1116,7 +1198,7 @@ int  fceuWrapperUpdate( void )
 
 		emulatorHasMutux = 0;
 
-		usleep( 100000 );
+		msleep( 100 );
 	}
 	return 0;
 }

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <QApplication>
+//#include <QProxyStyle>
 
 #include "Qt/ConsoleWindow.h"
 #include "Qt/fceuWrapper.h"
@@ -31,53 +32,78 @@ static void MessageOutput(QtMsgType type, const QMessageLogContext &context, con
     QByteArray localMsg = msg.toLocal8Bit();
     const char *file = context.file ? context.file : "";
     const char *function = context.function ? context.function : "";
+    char cmsg[2048];
     switch (type) 
     {
        case QtDebugMsg:
-           fprintf(stderr, "Qt Debug: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+           sprintf( cmsg, "Qt Debug: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+	   FCEUD_Message(cmsg);
            break;
        case QtInfoMsg:
-           fprintf(stderr, "Qt Info: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+           sprintf( cmsg, "Qt Info: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+	   FCEUD_Message(cmsg);
            break;
        case QtWarningMsg:
-           fprintf(stderr, "Qt Warning: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+           sprintf( cmsg, "Qt Warning: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+	   FCEUD_Message(cmsg);
            break;
        case QtCriticalMsg:
-           fprintf(stderr, "Qt Critical: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+           sprintf( cmsg, "Qt Critical: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+	   FCEUD_PrintError(cmsg);
            break;
        case QtFatalMsg:
-           fprintf(stderr, "Qt Fatal: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+           sprintf( cmsg, "Qt Fatal: %s (%s:%u, %s)\n", localMsg.constData(), file, context.line, function);
+	   FCEUD_PrintError(cmsg);
            break;
     }
+    fprintf(stderr, "%s", cmsg );
 }
 
+
+// This custom menu style wrapper used to prevent the menu bar from permanently stealing window focus when the ALT key is pressed.
+//class MenuStyle : public QProxyStyle
+//{
+//public:
+//    int styleHint(StyleHint stylehint, const QStyleOption *opt, const QWidget *widget, QStyleHintReturn *returnData) const
+//    {
+//        if (stylehint == QStyle::SH_MenuBar_AltKeyNavigation)
+//            return 0;
+//
+//        return QProxyStyle::styleHint(stylehint, opt, widget, returnData);
+//    }
+//};
+
+
+#undef main   // undef main in case SDL_Main
 
 int main( int argc, char *argv[] )
 {
 	int retval;
-   qInstallMessageHandler(MessageOutput);
+	qInstallMessageHandler(MessageOutput);
 	QApplication app(argc, argv);
-   const char *styleSheetEnv = NULL;
+	//const char *styleSheetEnv = NULL;
+	
+	//app.setStyle( new MenuStyle() );
 
-   styleSheetEnv = ::getenv("FCEUX_QT_STYLESHEET");
-
-   if ( styleSheetEnv != NULL )
-   {
-      QFile File(styleSheetEnv);
-
-      if ( File.open(QFile::ReadOnly) )
-      {
-         QString StyleSheet = QLatin1String(File.readAll());
-
-         app.setStyleSheet(StyleSheet);
-
-         printf("Using Qt Stylesheet file '%s'\n", styleSheetEnv );
-      }
-      else
-      {
-         printf("Warning: Could not open Qt Stylesheet file '%s'\n", styleSheetEnv );
-      }
-   }
+	//styleSheetEnv = ::getenv("FCEUX_QT_STYLESHEET");
+	//
+	//if ( styleSheetEnv != NULL )
+	//{
+	//   QFile File(styleSheetEnv);
+	//
+	//   if ( File.open(QFile::ReadOnly) )
+	//   {
+	//      QString StyleSheet = QLatin1String(File.readAll());
+	//
+	//      app.setStyleSheet(StyleSheet);
+	//
+	//      printf("Using Qt Stylesheet file '%s'\n", styleSheetEnv );
+	//   }
+	//   else
+	//   {
+	//      printf("Warning: Could not open Qt Stylesheet file '%s'\n", styleSheetEnv );
+	//   }
+	//}
 
 	fceuWrapperInit( argc, argv );
 
@@ -99,6 +125,8 @@ int main( int argc, char *argv[] )
 	//printf("App Return: %i \n", retval );
 
 	delete consoleWindow;
+
+	fceuWrapperMemoryCleanup();
 
 	return retval;
 }

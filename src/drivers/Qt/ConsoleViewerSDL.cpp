@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <unistd.h>
+//#include <unistd.h>
 
 #include "Qt/nes_shm.h"
 #include "Qt/fceuWrapper.h"
@@ -37,12 +37,14 @@ ConsoleViewSDL_t::ConsoleViewSDL_t(QWidget *parent)
 {
 	QPalette pal = palette();
 
-	pal.setColor(QPalette::Background, Qt::black);
+	pal.setColor(QPalette::Window, Qt::black);
 	setAutoFillBackground(true);
 	setPalette(pal);
 
-	setMinimumWidth( GL_NES_WIDTH );
-	setMinimumHeight( GL_NES_HEIGHT );
+	setMinimumWidth( 256 );
+	setMinimumHeight( 224 );
+	setFocusPolicy(Qt::StrongFocus);
+	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
 	view_width  = GL_NES_WIDTH;
 	view_height = GL_NES_HEIGHT;
@@ -56,6 +58,10 @@ ConsoleViewSDL_t::ConsoleViewSDL_t(QWidget *parent)
 	yscale = 2.0;
 
 	devPixRatio = 1.0f;
+	aspectRatio = 1.0f;
+	aspectX     = 1.0f;
+	aspectY     = 1.0f;
+
 	sdlWindow   = NULL;
 	sdlRenderer = NULL;
 	sdlTexture  = NULL;
@@ -72,7 +78,7 @@ ConsoleViewSDL_t::ConsoleViewSDL_t(QWidget *parent)
 		memset( localBuf, 0, localBufSize );
 	}
 
-	sqrPixels = true;
+	forceAspect  = true;
 	autoScaleEna = true;
 	linearFilter = false;
 
@@ -98,6 +104,7 @@ ConsoleViewSDL_t::~ConsoleViewSDL_t(void)
 	{
 		free( localBuf ); localBuf = NULL;
 	}
+	cleanup();
 }
 
 void ConsoleViewSDL_t::setLinearFilterEnable( bool ena )
@@ -117,7 +124,7 @@ void ConsoleViewSDL_t::setScaleXY( double xs, double ys )
 	xscale = xs;
 	yscale = ys;
 
-	if ( sqrPixels )
+	if ( forceAspect )
 	{
 		if ( (xscale*xyRatio) < yscale )
 		{
@@ -130,11 +137,30 @@ void ConsoleViewSDL_t::setScaleXY( double xs, double ys )
 	}
 }
 
+void ConsoleViewSDL_t::setAspectXY( double x, double y )
+{
+	aspectX = x;
+	aspectY = y;
+
+	aspectRatio = aspectY / aspectX;
+}
+
+void ConsoleViewSDL_t::getAspectXY( double &x, double &y )
+{
+	x = aspectX;
+	y = aspectY;
+}
+
+double ConsoleViewSDL_t::getAspectRatio(void)
+{
+	return aspectRatio;
+}
+
 void ConsoleViewSDL_t::transfer2LocalBuffer(void)
 {
 	int i=0, hq = 0;
 	int numPixels = nes_shm->video.ncol * nes_shm->video.nrow;
-	int cpSize = numPixels * 4;
+	unsigned int cpSize = numPixels * 4;
  	uint8_t *src, *dest;
 
 	if ( cpSize > localBufSize )
@@ -274,7 +300,7 @@ void ConsoleViewSDL_t::resizeEvent(QResizeEvent *event)
 	s = event->size();
 	view_width  = s.width();
 	view_height = s.height();
-	printf("SDL Resize: %i x %i \n", view_width, view_height);
+	//printf("SDL Resize: %i x %i \n", view_width, view_height);
 
 	gui_draw_area_width = view_width;
 	gui_draw_area_height = view_height;
@@ -353,7 +379,7 @@ void ConsoleViewSDL_t::render(void)
 	float xscaleTmp = (float)view_width  / (float)nesWidth;
 	float yscaleTmp = (float)view_height / (float)nesHeight;
 
-	if ( sqrPixels )
+	if ( forceAspect )
 	{
 		if ( (xscaleTmp*xyRatio) < yscaleTmp )
 		{
@@ -384,6 +410,42 @@ void ConsoleViewSDL_t::render(void)
 
 	rw=(int)(nesWidth*xscaleTmp);
 	rh=(int)(nesHeight*yscaleTmp);
+
+	if ( forceAspect )
+	{
+		int iw, ih, ax, ay;
+
+		ax = (int)(aspectX+0.50);
+		ay = (int)(aspectY+0.50);
+
+		iw = rw * ay;
+		ih = rh * ax;
+		
+		if ( iw > ih )
+		{
+			rh = (rw * ay) / ax;
+		}
+		else
+		{
+			rw = (rh * ax) / ay;
+		}
+
+		if ( rw > view_width )
+		{
+			rw = view_width;
+			rh = (rw * ay) / ax;
+		}
+
+		if ( rh > view_height )
+		{
+			rh = view_height;
+			rw = (rh * ax) / ay;
+		}
+	}
+
+	if ( rw > view_width ) rw = view_width;
+	if ( rh > view_height) rh = view_height;
+
 	sx=(view_width-rw)/2;   
 	sy=(view_height-rh)/2;
 
