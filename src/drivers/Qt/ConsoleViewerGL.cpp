@@ -46,8 +46,8 @@ extern unsigned int gui_draw_area_height;
 ConsoleViewGL_t::ConsoleViewGL_t(QWidget *parent)
 	: QOpenGLWidget( parent )
 {
-	view_width  = 0;
-	view_height = 0;
+	view_width  = 256;
+	view_height = 224;
 	gltexture   = 0;
 	devPixRatio = 1.0f;
 	aspectRatio = 1.0f;
@@ -114,16 +114,23 @@ int ConsoleViewGL_t::init( void )
 	return 0;
 }
 
+void ConsoleViewGL_t::reset(void)
+{
+	buildTextures();
+
+	return;
+}
+
 void ConsoleViewGL_t::buildTextures(void)
 {
 	int w, h;
-	 glEnable(GL_TEXTURE_RECTANGLE);
+	glEnable(GL_TEXTURE_RECTANGLE);
 
-	 if ( gltexture )
-	 {
-	 	glDeleteTextures(1, &gltexture);
-	 	gltexture=0;
-	 }
+	if ( gltexture )
+	{
+		glDeleteTextures(1, &gltexture);
+		gltexture=0;
+	}
 
 	glGenTextures(1, &gltexture);
 	//printf("Linear Interpolation on GL Texture: %s \n", linearFilter ? "Enabled" : "Disabled");
@@ -142,6 +149,7 @@ void ConsoleViewGL_t::buildTextures(void)
 			GL_RGBA8, w, h, 0,
 					GL_BGRA, GL_UNSIGNED_BYTE, 0 );
 
+	//printf("Texture Built: %ix%i\n", w, h);
 }
 
 void ConsoleViewGL_t::initializeGL(void)

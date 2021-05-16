@@ -28,12 +28,15 @@
 #include <QAction>
 #include <QMenuBar>
 #include <QPainter>
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QColorDialog>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QActionGroup>
+#include <QClipboard>
+#include <QGuiApplication>
 
 #include "../../types.h"
 #include "../../fceu.h"
@@ -50,6 +53,7 @@
 #include "Qt/HexEditor.h"
 #include "Qt/fceuWrapper.h"
 #include "Qt/ConsoleWindow.h"
+#include "Qt/PaletteEditor.h"
 
 #define PATTERNWIDTH          128
 #define PATTERNHEIGHT         128
@@ -68,7 +72,6 @@ static bool PPUView_maskUnusedGraphics = true;
 static bool PPUView_invertTheMask = false;
 static int PPUView_sprite16Mode[2] = { 0, 0 };
 static int pindex[2] = { 0, 0 };
-static QColor ppuv_palette[PALETTEHEIGHT][PALETTEWIDTH];
 static uint8_t pallast[32+3] = { 0 }; // palette cache for change comparison
 static uint8_t palcache[36] = { 0 }; //palette cache for drawing
 static uint8_t chrcache0[0x1000] = {0}, chrcache1[0x1000] = {0}, logcache0[0x1000] = {0}, logcache1[0x1000] = {0}; //cache CHR, fixes a refresh problem when right-clicking
@@ -142,13 +145,58 @@ void setPPUSelPatternTile( int table, int x, int y )
 	ppuViewWindow->patternView[ table ]->updateSelTileLabel();
 }
 //----------------------------------------------------
+static int exportActivePaletteACT( const char *filename )
+{
+	FILE *fp;
+	int i=0, c, ret = 0, numBytes;
+	unsigned char buf[768];
+
+	fp = fopen( filename, "wb");
+
+	if ( fp == NULL )
+	{
+		return -1;
+	}
+	memset( buf, 0, sizeof(buf) );
+
+	i=0;
+	for (int p=0; p<32; p++)
+	{
+		c = palcache[p];
+
+		//printf("%i: %02X\n", p, c );
+
+		if ( palo )
+		{
+			buf[i] = palo[c].r; i++;
+			buf[i] = palo[c].g; i++;
+			buf[i] = palo[c].b; i++;
+
+			//printf("%i: %02X    #%02X%02X%02X  rgb( %3i,%3i,%3i)\n", p, c,
+			//	palo[c].r, palo[c].g, palo[c].b, palo[c].r, palo[c].g, palo[c].b );
+		}
+	}
+
+	numBytes = ::fwrite( buf, 1, 768, fp );
+
+	if ( numBytes != 768 )
+	{
+		printf("Error Failed to Export Palette\n");
+		ret = -1;
+	}
+	::fclose(fp);
+
+	return ret;
+}
+//----------------------------------------------------
+//----------------------------------------------------
 ppuViewerDialog_t::ppuViewerDialog_t(QWidget *parent)
 	: QDialog( parent, Qt::Window )
 {
 	QMenuBar    *menuBar;
 	QVBoxLayout *mainLayout, *vbox;
 	QVBoxLayout *patternVbox[2];
-	QHBoxLayout *hbox;
+	QHBoxLayout *hbox, *hbox1, *hbox2;
 	QGridLayout *grid;
 	QActionGroup *group;
 	QMenu *fileMenu, *viewMenu, *colorMenu, *optMenu, *subMenu;
@@ -231,10 +279,30 @@ ppuViewerDialog_t::ppuViewerDialog_t(QWidget *parent)
 	grid->addLayout( hbox, 1, 1, Qt::AlignRight );
 
 	vbox         = new QVBoxLayout();
+	//paletteFrame = new QGroupBox( tr("Palettes: ---- Top Row: Background ---- Bottom Row: Sprites") );
 	paletteFrame = new QGroupBox( tr("Palettes:") );
-	paletteView  = new ppuPalatteView_t(this);
+	//paletteView  = new ppuPalatteView_t(this);
 
-	vbox->addWidget( paletteView, 1 );
+	hbox1        = new QHBoxLayout();
+	hbox2        = new QHBoxLayout();
+
+	for (int i=0; i<8; i++)
+	{
+		tilePalView[i] = new tilePaletteView_t(this);
+
+		if ( i < 4 )
+		{
+			hbox1->addWidget( tilePalView[i] );
+		}
+		else
+		{
+			hbox2->addWidget( tilePalView[i] );
+		}
+		tilePalView[i]->setIndex(i);
+	}
+
+	vbox->addLayout( hbox1, 1 );
+	vbox->addLayout( hbox2, 1 );
 	paletteFrame->setLayout( vbox );
 
 	mainLayout->addWidget( paletteFrame,  1 );
@@ -243,7 +311,6 @@ ppuViewerDialog_t::ppuViewerDialog_t(QWidget *parent)
 	patternView[1]->setPattern( &pattern1 );
 	patternView[0]->setTileLabel( tileLabel[0] );
 	patternView[1]->setTileLabel( tileLabel[1] );
-	paletteView->setTileLabel( paletteFrame );
 
 	scanLineEdit->setRange( 0, 255 );
 	scanLineEdit->setValue( PPUViewScanline );
@@ -349,14 +416,14 @@ ppuViewerDialog_t::ppuViewerDialog_t(QWidget *parent)
 
 	act = new QAction(tr("&Click"), this);
 	act->setCheckable(true);
-	act->setChecked(true);
+	act->setChecked( !patternView[0]->getHoverFocus() );
 	group->addAction(act);
 	subMenu->addAction(act);
 	connect(act, SIGNAL(triggered()), this, SLOT(setClickFocus(void)) );
 
 	act = new QAction(tr("&Hover"), this);
 	act->setCheckable(true);
-	act->setChecked(false);
+	act->setChecked( patternView[0]->getHoverFocus() );
 	group->addAction(act);
 	subMenu->addAction(act);
 	connect(act, SIGNAL(triggered()), this, SLOT(setHoverFocus(void)) );
@@ -467,6 +534,8 @@ ppuPatternView_t::ppuPatternView_t( int patternIndexID, QWidget *parent)
 	gridColor.setRgb(128,128,128);
 	selTile.setX(-1);
 	selTile.setY(-1);
+
+	g_config->getOption("SDL.PPU_TileFocusPolicy", &hover2Focus );
 }
 //----------------------------------------------------
 void ppuPatternView_t::setPattern( ppuPatternTable_t *p )
@@ -482,6 +551,8 @@ void ppuPatternView_t::setTileLabel( QLabel *l )
 void ppuPatternView_t::setHoverFocus( bool h )
 {
 	hover2Focus = h;
+
+	g_config->setOption("SDL.PPU_TileFocusPolicy", hover2Focus );
 }
 //----------------------------------------------------
 void ppuPatternView_t::setTileCoord( int x, int y )
@@ -1510,7 +1581,7 @@ void FCEUD_UpdatePPUView(int scanline, int refreshchr)
 	{
 		return;
 	}
-	int x,y,i;
+	int x,i;
 
 	if (refreshchr)
 	{
@@ -1568,19 +1639,6 @@ void FCEUD_UpdatePPUView(int scanline, int refreshchr)
 		palcache[0x04] = palcache[0x14] = UPALRAM[0];
 		palcache[0x08] = palcache[0x18] = UPALRAM[1];
 		palcache[0x0C] = palcache[0x1C] = UPALRAM[2];
-
-		//draw palettes
-		for (y = 0; y < PALETTEHEIGHT; y++)
-		{
-			for (x = 0; x < PALETTEWIDTH; x++)
-			{
-				i = (y*PALETTEWIDTH) + x;
-
-				ppuv_palette[y][x].setBlue( palo[palcache[i]].b );
-				ppuv_palette[y][x].setGreen( palo[palcache[i]].g );
-				ppuv_palette[y][x].setRed( palo[palcache[i]].r );
-			}
-		}
 	}
 
 	DrawPatternTable( &pattern0,chrcache0,logcache0,pindex[0]);
@@ -1595,147 +1653,306 @@ void FCEUD_UpdatePPUView(int scanline, int refreshchr)
 	redrawWindow = true;
 }
 //----------------------------------------------------
-ppuPalatteView_t::ppuPalatteView_t(QWidget *parent)
+//-- Tile Palette View
+//----------------------------------------------------
+tilePaletteView_t::tilePaletteView_t(QWidget *parent)
 	: QWidget(parent)
 {
-	this->setFocusPolicy(Qt::StrongFocus);
-	this->setMouseTracking(true);
+	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	viewHeight = 32;
+	viewWidth = viewHeight*4;
+	setMinimumWidth( viewWidth );
+	setMinimumHeight( viewHeight );
 
-	setMinimumWidth( 32 * PALETTEWIDTH );
-	setMinimumHeight( 32 * PALETTEHEIGHT );
-
-	viewWidth  = 32 * PALETTEWIDTH;
-	viewHeight = 32 * PALETTEHEIGHT;
-
-	boxWidth  = viewWidth / PALETTEWIDTH;
-	boxHeight = viewHeight / PALETTEHEIGHT;
-
-	frame = NULL;
+	boxWidth  = viewWidth/4;
+	boxHeight = viewHeight;
+	palIdx = 0;
+	selBox = 0;
 }
 //----------------------------------------------------
-ppuPalatteView_t::~ppuPalatteView_t(void)
+tilePaletteView_t::~tilePaletteView_t(void)
 {
 
 }
 //----------------------------------------------------
-void ppuPalatteView_t::setTileLabel( QGroupBox *l )
+void tilePaletteView_t::setIndex( int val )
 {
-	frame = l;
+	palIdx = val;
 }
 //----------------------------------------------------
-QPoint ppuPalatteView_t::convPixToTile( QPoint p )
+int  tilePaletteView_t::heightForWidth(int w) const
 {
-	QPoint t(0,0);
-
-	t.setX( p.x() / boxWidth );
-	t.setY( p.y() / boxHeight );
-
-	return t;
+	return w/4;
 }
 //----------------------------------------------------
-void ppuPalatteView_t::resizeEvent(QResizeEvent *event)
+QSize tilePaletteView_t::minimumSizeHint(void) const
+{
+	return QSize(48,12);
+}
+//----------------------------------------------------
+QSize tilePaletteView_t::maximumSizeHint(void) const
+{
+	return QSize(256,64);
+}
+//----------------------------------------------------
+QSize tilePaletteView_t::sizeHint(void) const
+{
+	return QSize(128,32);
+}
+//----------------------------------------------------
+QPoint tilePaletteView_t::convPixToCell( QPoint p )
+{
+	QPoint o;
+
+	o.setX( p.x() / boxWidth );
+	o.setY( 0 );
+
+	return o;
+}
+//----------------------------------------------------
+void tilePaletteView_t::mouseMoveEvent(QMouseEvent *event)
+{
+	QPoint cell = convPixToCell( event->pos() );
+
+	selBox = cell.x();
+}
+//----------------------------------------------------
+void tilePaletteView_t::contextMenuEvent(QContextMenuEvent *event)
+{
+	QAction *act;
+	QMenu menu(this);
+	QMenu *subMenu;
+	char stmp[128];
+	QPoint p;
+
+	p = convPixToCell( event->pos() );
+
+	selBox = p.x();
+
+	act = new QAction(tr("Change Color"), &menu);
+	//act->setCheckable(true);
+	//act->setChecked(drawTileGrid);
+	//act->setShortcut( QKeySequence(tr("G")));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openColorPicker(void)) );
+	menu.addAction( act );
+
+	act = new QAction(tr("Export ACT"), &menu);
+	//act->setShortcut( QKeySequence(tr("G")));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(exportPaletteFileDialog(void)) );
+	menu.addAction( act );
+
+	if ( palo )
+	{
+		int i;
+
+		i = palcache[ (palIdx << 2) | selBox ];
+
+		subMenu = menu.addMenu( tr("Copy Color to Clipboard") );
+
+		sprintf( stmp, "Hex #%02X%02X%02X", palo[i].r, palo[i].g, palo[i].b );
+		act = new QAction(tr(stmp), &menu);
+		//act->setShortcut( QKeySequence(tr("G")));
+		connect( act, SIGNAL(triggered(void)), this, SLOT(copyColor2ClipBoardHex(void)) );
+		subMenu->addAction( act );
+
+		sprintf( stmp, "rgb(%3i,%3i,%3i)", palo[i].r, palo[i].g, palo[i].b );
+		act = new QAction(tr(stmp), &menu);
+		//act->setShortcut( QKeySequence(tr("G")));
+		connect( act, SIGNAL(triggered(void)), this, SLOT(copyColor2ClipBoardRGB(void)) );
+		subMenu->addAction( act );
+	}
+
+	menu.exec(event->globalPos());
+}
+//----------------------------------------------------
+void tilePaletteView_t::copyColor2ClipBoardHex(void)
+{
+	int p;
+	char txt[64];
+	QClipboard *clipboard = QGuiApplication::clipboard();
+
+	if ( palo == NULL )
+	{
+		return;
+	}
+	p = palcache[ (palIdx << 2) | selBox ];
+
+	sprintf( txt, "#%02X%02X%02X", palo[p].r, palo[p].g, palo[p].b );
+
+	clipboard->setText( tr(txt), QClipboard::Clipboard );
+
+	if ( clipboard->supportsSelection() )
+	{
+		clipboard->setText( tr(txt), QClipboard::Selection );
+	}
+}
+//----------------------------------------------------
+void tilePaletteView_t::copyColor2ClipBoardRGB(void)
+{
+	int p;
+	char txt[64];
+	QClipboard *clipboard = QGuiApplication::clipboard();
+
+	if ( palo == NULL )
+	{
+		return;
+	}
+	p = palcache[ (palIdx << 2) | selBox ];
+
+	sprintf( txt, "rgb(%3i,%3i,%3i)", palo[p].r, palo[p].g, palo[p].b );
+
+	clipboard->setText( tr(txt), QClipboard::Clipboard );
+
+	if ( clipboard->supportsSelection() )
+	{
+		clipboard->setText( tr(txt), QClipboard::Selection );
+	}
+}
+//----------------------------------------------------
+void tilePaletteView_t::exportPaletteFileDialog(void)
+{
+	int ret, useNativeFileDialogVal;
+	QString filename;
+	QFileDialog  dialog(this, tr("Export Palette To File") );
+	const char *home;
+
+	dialog.setFileMode(QFileDialog::AnyFile);
+
+	dialog.setNameFilter(tr("Adobe Color Table Files (*.act *.ACT) ;; All files (*)"));
+
+	dialog.setViewMode(QFileDialog::List);
+	dialog.setFilter( QDir::AllEntries | QDir::AllDirs | QDir::Hidden );
+	dialog.setLabelText( QFileDialog::Accept, tr("Export") );
+	dialog.setDefaultSuffix( tr(".act") );
+
+	home = ::getenv("HOME");
+
+	if ( home )
+	{
+		dialog.setDirectory( tr(home) );
+	}
+
+	// Check config option to use native file dialog or not
+	g_config->getOption ("SDL.UseNativeFileDialog", &useNativeFileDialogVal);
+
+	dialog.setOption(QFileDialog::DontUseNativeDialog, !useNativeFileDialogVal);
+
+	ret = dialog.exec();
+
+	if ( ret )
+	{
+		QStringList fileList;
+		fileList = dialog.selectedFiles();
+
+		if ( fileList.size() > 0 )
+		{
+			filename = fileList[0];
+		}
+	}
+
+	if ( filename.isNull() )
+	{
+	   return;
+	}
+	//qDebug() << "selected file path : " << filename.toUtf8();
+
+	exportActivePaletteACT( filename.toStdString().c_str() );
+}
+//----------------------------------------------------
+void tilePaletteView_t::openColorPicker(void)
+{
+	nesPalettePickerDialog *dialog;
+
+	dialog = new nesPalettePickerDialog( (palIdx << 2) + selBox, this );
+
+	dialog->show();
+}
+//----------------------------------------------------
+void tilePaletteView_t::resizeEvent(QResizeEvent *event)
 {
 	viewWidth  = event->size().width();
 	viewHeight = event->size().height();
-
-	boxWidth  = viewWidth / PALETTEWIDTH;
-	boxHeight = viewHeight / PALETTEHEIGHT;
 }
 //----------------------------------------------------
-void ppuPalatteView_t::mouseMoveEvent(QMouseEvent *event)
+void tilePaletteView_t::paintEvent(QPaintEvent *event)
 {
-	QPoint tile = convPixToTile( event->pos() );
-
-	if ( (tile.x() < PALETTEWIDTH) && (tile.y() < PALETTEHEIGHT) )
-	{
-		char stmp[64];
-		int ix = (tile.y()<<4)|tile.x();
-
-		sprintf( stmp, "Palette: $%02X", palcache[ix]);
-
-		frame->setTitle( tr(stmp) );
-	}
-}
-//----------------------------------------------------------------------------
-void ppuPalatteView_t::mousePressEvent(QMouseEvent * event)
-{
-	//QPoint tile = convPixToTile( event->pos() );
-
-	//if ( event->button() == Qt::LeftButton )
-	//{
-	//}
-	//else if ( event->button() == Qt::RightButton )
-	//{
-	//}
-}
-//----------------------------------------------------
-void ppuPalatteView_t::paintEvent(QPaintEvent *event)
-{
-	int x,y,w,h,xx,yy,i,j,p,ii;
+	int x,w,h,xx,yy,p,p2,i,j;
 	QPainter painter(this);
+	QColor color( 0, 0, 0);
+	QColor  white(255,255,255), black(0,0,0);
+	//QPen pen;
+	//char showSelector;
+	char c[4];
+
+	//pen = painter.pen();
+
 	viewWidth  = event->rect().width();
 	viewHeight = event->rect().height();
-	QColor color, black(0,0,0), white(255,255,255);
-	QPen     pen;
-	char     c[4];
 
-	pen = painter.pen();
+	w = viewWidth  / 4;
+  	h = viewHeight;
 
-	//printf("PPU PatternView %ix%i \n", viewWidth, viewHeight );
+	//if ( w < h )
+	//{
+	//	h = w;
+	//}
+	//else
+	//{
+	//	w = h;
+	//}
 
-	w = viewWidth / PALETTEWIDTH;
-  	h = viewHeight / PALETTEHEIGHT;
+	boxWidth  = w;
+	boxHeight = h;
 
 	i = w / 4;
 	j = h / 4;
 
+	p2 = palIdx << 2;
 	yy = 0;
-	for (y=0; y < PALETTEHEIGHT; y++)
+	xx = 0;
+	for (x=0; x < 4; x++)
 	{
-		xx = 0;
-
-		for (x=0; x < PALETTEWIDTH; x++)
+		if ( palo != NULL )
 		{
-			ii = (y*PALETTEWIDTH) + x;
-
-			p = palcache[ii];
-
-			color = ppuv_palette[y][x];
+			p = palcache[p2 | x];
+			color.setBlue( palo[p].b );
+			color.setGreen( palo[p].g );
+			color.setRed( palo[p].r );
 
 			c[0] = conv2hex( (p & 0xF0) >> 4 );
 			c[1] = conv2hex(  p & 0x0F);
 			c[2] =  0;
-
-			painter.fillRect( xx, yy, w, h, color );
-
-			if ( qGray( color.red(), color.green(), color.blue() ) > 128 )
-			{
-				painter.setPen( black );
-			}
-			else
-			{
-				painter.setPen( white );
-			}
-			painter.drawText( xx+i, yy+h-j, tr(c) );
-
-			xx += w;
 		}
-		yy += h;
-	}
+		painter.fillRect( xx, yy, w, h, color );
 
-	y = PALETTEHEIGHT*h;
-	for (int i=0; i<=PALETTEWIDTH; i++)
-	{
-		x = i*w; 
-		painter.drawLine( x, 0 , x, y );
+		if ( qGray( color.red(), color.green(), color.blue() ) > 128 )
+		{
+			painter.setPen( black );
+		}
+		else
+		{
+			painter.setPen( white );
+		}
+		painter.drawText( xx+i, yy+h-j, tr(c) );
+
+		painter.setPen( black );
+		painter.drawRect( xx, yy, w-1, h-1 );
+		painter.setPen( white );
+		painter.drawRect( xx+1, yy+1, w-3, h-3 );
+		xx += w;
 	}
 	
-	x = PALETTEWIDTH*w; 
-	for (int i=0; i<=PALETTEHEIGHT; i++)
-	{
-		y = i*h;
-		painter.drawLine( 0, y, x, y );
-	}
+	//painter.setPen( black );
+	//painter.drawLine( 0, 0   , w*4, 0 );
+	//painter.drawLine( 0, h-1 , w*4, h-1 );
+	//xx = 0;
+
+	//for (int i=0; i < 5; i++)
+	//{
+	//	painter.drawLine( xx, 0 , xx, h );
+
+	//	xx += w;
+	//}
 }
 //----------------------------------------------------
 //----------------------------------------------------
@@ -2589,6 +2806,11 @@ spriteViewerDialog_t::spriteViewerDialog_t(QWidget *parent)
 
 	spriteViewWindow = this;
 
+	oamView  = new oamPatternView_t(this);
+	tileView = new oamTileView_t(this);
+	palView  = new oamPaletteView_t(this);
+	preView  = new oamPreview_t(this);
+
 	menuBar = new QMenuBar(this);
 
 	// This is needed for menu bar to show up on MacOS
@@ -2659,14 +2881,14 @@ spriteViewerDialog_t::spriteViewerDialog_t(QWidget *parent)
 
 	act = new QAction(tr("&Click"), this);
 	act->setCheckable(true);
-	act->setChecked(true);
+	act->setChecked( !oamView->getHoverFocus() );
 	group->addAction(act);
 	subMenu->addAction(act);
 	connect(act, SIGNAL(triggered()), this, SLOT(setClickFocus(void)) );
 
 	act = new QAction(tr("&Hover"), this);
 	act->setCheckable(true);
-	act->setChecked(false);
+	act->setChecked( oamView->getHoverFocus() );
 	group->addAction(act);
 	subMenu->addAction(act);
 	connect(act, SIGNAL(triggered()), this, SLOT(setHoverFocus(void)) );
@@ -2694,11 +2916,6 @@ spriteViewerDialog_t::spriteViewerDialog_t(QWidget *parent)
 	mainLayout->setMenuBar( menuBar );
 
 	setLayout( mainLayout );
-
-	oamView  = new oamPatternView_t(this);
-	tileView = new oamTileView_t(this);
-	palView  = new oamPaletteView_t(this);
-	preView  = new oamPreview_t(this);
 
 	useSprRam = new QRadioButton( tr("Sprite RAM") );
 	useCpuPag = new QRadioButton( tr("CPU Page #") );
@@ -2959,6 +3176,8 @@ oamPatternView_t::oamPatternView_t( QWidget *parent )
 	selSprite.setX(0);
 	selSprite.setY(0);
 	spriteIdx = 0;
+
+	g_config->getOption("SDL.OAM_TileFocusPolicy", &hover2Focus );
 }
 //----------------------------------------------------
 oamPatternView_t::~oamPatternView_t(void)
@@ -2966,7 +3185,12 @@ oamPatternView_t::~oamPatternView_t(void)
 
 }
 //----------------------------------------------------
-void oamPatternView_t::setHover2Focus(bool val){ hover2Focus = val; }
+void oamPatternView_t::setHover2Focus(bool val)
+{
+	hover2Focus = val;
+
+	g_config->setOption("SDL.OAM_TileFocusPolicy", hover2Focus );
+}
 //----------------------------------------------------
 void oamPatternView_t::setGridVisibility(bool val){ showGrid = val; }
 //----------------------------------------------------
@@ -3449,6 +3673,10 @@ void oamPaletteView_t::paintEvent(QPaintEvent *event)
 		}
 		painter.drawText( xx+i, yy+h-j, tr(c) );
 
+		painter.setPen( black );
+		painter.drawRect( xx, yy, w-1, h-1 );
+		painter.setPen( white );
+		painter.drawRect( xx+1, yy+1, w-3, h-3 );
 		xx += w;
 	}
 }

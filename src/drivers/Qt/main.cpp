@@ -83,6 +83,13 @@ int main( int argc, char *argv[] )
 	QApplication app(argc, argv);
 	//const char *styleSheetEnv = NULL;
 	
+	#ifdef WIN32
+	if (AttachConsole(ATTACH_PARENT_PROCESS))
+	{
+		freopen("CONOUT$", "w", stdout);
+		freopen("CONOUT$", "w", stderr);
+	}
+	#endif
 	//app.setStyle( new MenuStyle() );
 
 	//styleSheetEnv = ::getenv("FCEUX_QT_STYLESHEET");
@@ -111,14 +118,7 @@ int main( int argc, char *argv[] )
 
 	consoleWindow->show();
 
-	if ( consoleWindow->viewport_SDL )
-	{
-		consoleWindow->viewport_SDL->init();
-	}
-	else
-	{
-		consoleWindow->viewport_GL->init();
-	}
+	consoleWindow->videoInit();
 
 	retval = app.exec();
 

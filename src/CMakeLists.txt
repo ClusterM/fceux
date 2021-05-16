@@ -34,7 +34,7 @@ if(WIN32)
      include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/drivers/win/zlib )
      set( OPENGL_LDFLAGS  OpenGL::GL )
      set( SDL2_LDFLAGS  ${SDL_INSTALL_PREFIX}/SDL2/lib/x64/SDL2.lib )
-     set( SYS_LIBS  wsock32 ws2_32 )
+     set( SYS_LIBS  wsock32 ws2_32 vfw32 )
 else(WIN32)
   # Non Windows System
   # UNIX (Linux or Mac OSX)
@@ -73,6 +73,13 @@ else(WIN32)
   if ( ${MINIZIP_FOUND} )
 	  message( STATUS "Using System minizip ${MINIZIP_VERSION}" )
 	  add_definitions( -D_SYSTEM_MINIZIP ${MINIZIP_CFLAGS} )
+  endif()
+
+  pkg_check_modules( X264 x264)
+
+  if ( ${X264_FOUND} )
+	  message( STATUS "Using System X264 Encoder Library ${X264_VERSION}" )
+	  add_definitions( -D_USE_X264 ${X264_CFLAGS} )
   endif()
 
   #pkg_check_modules( GL gl) # Use built in find package instead for OpenGL
@@ -438,8 +445,6 @@ set(SRC_DRIVERS_COMMON
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/common/vidblit.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/common/os_utils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/common/nes_ntsc.c
-  #${CMAKE_CURRENT_SOURCE_DIR}/drivers/videolog/nesvideos-piece.cpp
-  #${CMAKE_CURRENT_SOURCE_DIR}/drivers/videolog/rgbtorgb.cpp
 )
 
 set(SRC_DRIVERS_SDL
@@ -485,6 +490,10 @@ set(SRC_DRIVERS_SDL
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/sdl-joystick.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/sdl-throttle.cpp  
   ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/unix-netplay.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/AviRecord.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/avi/avi-utils.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/avi/fileio.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/drivers/Qt/avi/gwavi.cpp
 )
 
 set(SOURCES ${SRC_CORE} ${SRC_DRIVERS_COMMON} ${SRC_DRIVERS_SDL})
@@ -525,7 +534,7 @@ target_link_libraries( ${APP_NAME}
    ${OPENGL_LDFLAGS}  
  	${SDL2_LDFLAGS}
 	${MINIZIP_LDFLAGS} ${ZLIB_LIBRARIES}
-	${LUA_LDFLAGS}
+	${LUA_LDFLAGS} ${X264_LDFLAGS}
  	${SYS_LIBS}
 )
 

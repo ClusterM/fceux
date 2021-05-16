@@ -27,6 +27,7 @@
 #include "Qt/ConsoleViewerGL.h"
 #include "Qt/ConsoleViewerSDL.h"
 #include "Qt/GamePadConf.h"
+#include "Qt/AviRecord.h"
 
 class  emulatorThread_t : public QThread
 {
@@ -36,7 +37,7 @@ class  emulatorThread_t : public QThread
 		void run( void ) override;
 
 	public:
-		emulatorThread_t(void);
+		emulatorThread_t( QObject *parent = 0 );
 
 		void setPriority( QThread::Priority priority );
 
@@ -105,6 +106,8 @@ class  consoleWin_t : public QMainWindow
 		QMutex *mutex;
 #endif
 
+		int  videoInit(void);
+		void videoReset(void);
 		void requestClose(void);
 
 	 	void QueueErrorMsgWindow( const char *msg );
@@ -123,6 +126,7 @@ class  consoleWin_t : public QMainWindow
 		int loadVideoDriver( int driverId );
 
 		emulatorThread_t *emulatorThread;
+		AviRecordDiskThread_t *aviDiskThread;
 
 		void addRecentRom( const char *rom );
 
@@ -202,6 +206,12 @@ class  consoleWin_t : public QMainWindow
 		QAction *recAsMovAct;
 		QAction *region[3];
 		QAction *ramInit[4];
+		QAction *recAviAct;
+		QAction *recAsAviAct;
+		QAction *stopAviAct;
+		QAction *recWavAct;
+		QAction *recAsWavAct;
+		QAction *stopWavAct;
 
 		QTimer  *gameTimer;
 
@@ -283,6 +293,7 @@ class  consoleWin_t : public QMainWindow
 		void decrementState(void);
 		void loadLua(void);
 		void takeScreenShot(void);
+		void prepareScreenShot(void);
 		void powerConsoleCB(void);
 		void consoleHardReset(void);
 		void consoleSoftReset(void);
@@ -357,6 +368,14 @@ class  consoleWin_t : public QMainWindow
 		void mainMenuOpen(void);
 		void mainMenuClose(void);
 		void warnAmbiguousShortcut( QShortcut*);
+		void aviRecordStart(void);
+		void aviRecordAsStart(void);
+		void aviRecordStop(void);
+		void aviAudioEnableChange(bool);
+		void aviVideoFormatChanged(int idx);
+		void wavRecordStart(void);
+		void wavRecordAsStart(void);
+		void wavRecordStop(void);
 
 };
 

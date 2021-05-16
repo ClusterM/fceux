@@ -58,6 +58,7 @@ class ppuPatternView_t : public QWidget
 		void setHoverFocus( bool h );
 		QPoint convPixToTile( QPoint p );
 
+		bool getHoverFocus(void){ return hover2Focus; };
 		bool getDrawTileGrid(void){ return drawTileGrid; };
 	protected:
 		void paintEvent(QPaintEvent *event);
@@ -101,26 +102,39 @@ class ppuPatternView_t : public QWidget
 	void cycleNextPalette(void);
 };
 
-class ppuPalatteView_t : public QWidget
+class tilePaletteView_t : public QWidget
 {
 	Q_OBJECT
 
 	public:
-		ppuPalatteView_t(QWidget *parent = 0);
-		~ppuPalatteView_t(void);
+		tilePaletteView_t( QWidget *parent = 0);
+		~tilePaletteView_t(void);
 
-		void setTileLabel( QGroupBox *l );
-		QPoint convPixToTile( QPoint p );
+		void setIndex( int val );
 	protected:
 		void paintEvent(QPaintEvent *event);
 		void resizeEvent(QResizeEvent *event);
 		void mouseMoveEvent(QMouseEvent *event);
-		void mousePressEvent(QMouseEvent * event);
-		int viewWidth;
-		int viewHeight;
-		int boxWidth;
-		int boxHeight;
-		QGroupBox *frame;
+		void contextMenuEvent(QContextMenuEvent *event);
+		int  heightForWidth(int w) const;
+		QSize  minimumSizeHint(void) const;
+		QSize  maximumSizeHint(void) const;
+		QSize  sizeHint(void) const;
+		QPoint convPixToCell( QPoint p );
+
+	private:
+		int  viewWidth;
+		int  viewHeight;
+		int  palIdx;
+		int  boxWidth;
+		int  boxHeight;
+		int  selBox;
+
+	private slots:
+		void openColorPicker(void);
+		void exportPaletteFileDialog(void);
+		void copyColor2ClipBoardHex(void);
+		void copyColor2ClipBoardRGB(void);
 };
 
 class ppuTileView_t : public QWidget
@@ -252,8 +266,8 @@ class ppuViewerDialog_t : public QDialog
 		ppuViewerDialog_t(QWidget *parent = 0);
 		~ppuViewerDialog_t(void);
 
-		ppuPatternView_t *patternView[2];
-		ppuPalatteView_t *paletteView;
+		ppuPatternView_t  *patternView[2];
+		tilePaletteView_t *tilePalView[8];
 	protected:
 
 		void closeEvent(QCloseEvent *bar);
@@ -328,6 +342,7 @@ class oamPatternView_t : public QWidget
 
 		int  getSpriteIndex(void);
 		void setHover2Focus(bool val);
+		bool getHoverFocus(void){ return hover2Focus; };
 		void setGridVisibility(bool val);
 		bool getGridVisibility(void){ return showGrid; };
 	protected:
