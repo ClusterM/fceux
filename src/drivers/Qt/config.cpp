@@ -445,11 +445,11 @@ InitConfig()
 	// sound options
 	config->addOption('s', "sound", "SDL.Sound", 1);
 	config->addOption("volume", "SDL.Sound.Volume", 150);
-	config->addOption("trianglevol", "SDL.Sound.TriangleVolume", 256);
-	config->addOption("square1vol", "SDL.Sound.Square1Volume", 256);
-	config->addOption("square2vol", "SDL.Sound.Square2Volume", 256);
-	config->addOption("noisevol", "SDL.Sound.NoiseVolume", 256);
-	config->addOption("pcmvol", "SDL.Sound.PCMVolume", 256);
+	config->addOption("trianglevol", "SDL.Sound.TriangleVolume", 255);
+	config->addOption("square1vol", "SDL.Sound.Square1Volume", 255);
+	config->addOption("square2vol", "SDL.Sound.Square2Volume", 255);
+	config->addOption("noisevol", "SDL.Sound.NoiseVolume", 255);
+	config->addOption("pcmvol", "SDL.Sound.PCMVolume", 255);
 	config->addOption("soundrate", "SDL.Sound.Rate", 44100);
 	config->addOption("soundq", "SDL.Sound.Quality", 1);
 	config->addOption("soundrecord", "SDL.Sound.RecordFile", "");
@@ -504,6 +504,7 @@ InitConfig()
 	config->addOption("togglemenu", "SDL.ToggleMenu", 0);
 	config->addOption("cursorType", "SDL.CursorType", 0);
 	config->addOption("cursorVis" , "SDL.CursorVis", 1);
+	config->addOption("SDL.DrawInputAids", 1);
 
 	// OpenGL options
 	config->addOption("opengl", "SDL.OpenGL", 1);

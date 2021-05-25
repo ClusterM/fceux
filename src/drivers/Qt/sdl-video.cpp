@@ -77,15 +77,8 @@ extern bool MaxSpeed;
  * Attempts to destroy the graphical video display.  Returns 0 on
  * success, -1 on failure.
  */
-
-//draw input aids if we are fullscreen
-bool FCEUD_ShouldDrawInputAids()
-{
-	return s_fullscreen!=0;
-}
- 
 int
-KillVideo()
+KillVideo(void)
 {
 	//printf("Killing Video\n");
 
@@ -105,8 +98,9 @@ KillVideo()
 
 	// return failure if the video system was not initialized
 	if (s_inited == 0)
+	{
 		return -1;
-
+	}
 
 	// SDL Video system is not used.
 	// shut down the SDL video sub-system

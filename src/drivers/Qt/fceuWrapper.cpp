@@ -84,6 +84,7 @@ bool turbo = false;
 bool pauseAfterPlayback = false;
 bool suggestReadOnlyReplay = true;
 bool showStatusIconOpt = true;
+bool drawInputAidsEnable = true;
 unsigned int gui_draw_area_width   = 256;
 unsigned int gui_draw_area_height  = 256;
 
@@ -182,20 +183,29 @@ FCEUD_GetTimeFreq(void)
 static int
 DriverInitialize(FCEUGI *gi)
 {
-	if(InitVideo(gi) < 0) return 0;
+	if (InitVideo(gi) < 0)
+	{
+		return 0;
+	}
 	inited|=4;
 
-	if(InitSound())
+	if (InitSound())
+	{
 		inited|=1;
+	}
 
-	if(InitJoysticks())
+	if (InitJoysticks())
+	{
 		inited|=2;
+	}
 
 	int fourscore=0;
 	g_config->getOption("SDL.FourScore", &fourscore);
 	eoptions &= ~EO_FOURSCORE;
-	if(fourscore)
+	if (fourscore)
+	{
 		eoptions |= EO_FOURSCORE;
+	}
 
 	InitInputInterface();
 	return 1;
@@ -425,12 +435,12 @@ CloseGame(void)
 	debugSymbolTable.clear();
 	CDLoggerROMClosed();
 
-   int state_to_save;
-   g_config->getOption("SDL.AutoSaveState", &state_to_save);
-   if (state_to_save < 10 && state_to_save >= 0){
-       FCEUI_SelectState(state_to_save, 0);
-       FCEUI_SaveState(NULL, false);
-   }
+	int state_to_save;
+	g_config->getOption("SDL.AutoSaveState", &state_to_save);
+	if (state_to_save < 10 && state_to_save >= 0){
+	    FCEUI_SelectState(state_to_save, 0);
+	    FCEUI_SaveState(NULL, false);
+	}
 
 	int autoInputPreset;
 	g_config->getOption( "SDL.AutoInputPreset", &autoInputPreset );
@@ -726,6 +736,8 @@ int  fceuWrapperInit( int argc, char *argv[] )
 	{
 		AutoResumePlay = false;
 	}
+
+	g_config->getOption ("SDL.DrawInputAids", &drawInputAidsEnable);
 
 	// check to see if recording HUD to AVI is enabled
 	int rh;
@@ -1538,6 +1550,11 @@ int FCEUD_ShowStatusIcon(void)
 void FCEUD_ToggleStatusIcon(void)
 {
 	showStatusIconOpt = !showStatusIconOpt;
+}
+
+bool FCEUD_ShouldDrawInputAids(void)
+{
+	return drawInputAidsEnable;
 }
 
 void FCEUD_TurboOn	 (void) { /* TODO */ };

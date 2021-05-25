@@ -122,6 +122,7 @@ consoleWin_t::consoleWin_t(QWidget *parent)
 	mainMenuPauseWhenActv = false;
 
 	g_config->getOption( "SDL.PauseOnMainMenuAccess", &mainMenuPauseWhenActv );
+	g_config->getOption ("SDL.VideoDriver", &use_SDL_video);
 
 	if ( use_SDL_video )
 	{
@@ -969,6 +970,7 @@ void consoleWin_t::createMainMenu(void)
 	//autoResume->setShortcut( QKeySequence(tr("Ctrl+C")));
 	autoResume->setCheckable(true);
 	autoResume->setStatusTip(tr("Auto-Resume Play"));
+	syncActionConfig( autoResume, "SDL.AutoResume" );
 	connect(autoResume, SIGNAL(triggered()), this, SLOT(toggleAutoResume(void)) );
 
 	optMenu->addAction(autoResume);
@@ -1669,7 +1671,10 @@ int consoleWin_t::loadVideoDriver( int driverId )
 
 		setCentralWidget(viewport_SDL);
 
+		setViewportAspect();
+
 		viewport_SDL->init();
+
 	}
 	else
 	{  // OpenGL Driver
@@ -1691,7 +1696,12 @@ int consoleWin_t::loadVideoDriver( int driverId )
 		viewport_GL = new ConsoleViewGL_t(this);
 
 		setCentralWidget(viewport_GL);
+
+		setViewportAspect();
+
+		viewport_GL->init();
 	}
+
 	return 0;
 }
 //---------------------------------------------------------------------------
@@ -3074,8 +3084,10 @@ void consoleWin_t::emuSetFrameAdvDelay(void)
 
 void consoleWin_t::setAutoFireOnFrames(void)
 {
-	int ret;
+	int ret, autoFireOnFrames, autoFireOffFrames;
 	QInputDialog dialog(this);
+
+	GetAutoFirePattern( &autoFireOnFrames, &autoFireOffFrames );
 
 	dialog.setWindowTitle( tr("AutoFire Pattern ON Frames") );
 	dialog.setLabelText( tr("Specify desired number of ON frames in autofire pattern:") );
@@ -3088,14 +3100,18 @@ void consoleWin_t::setAutoFireOnFrames(void)
 	
 	if ( QDialog::Accepted == ret )
 	{
-	   autoFireOnFrames = dialog.intValue();
+		autoFireOnFrames = dialog.intValue();
+
+		SetAutoFirePattern( autoFireOnFrames, autoFireOffFrames );
 	}
 }
 
 void consoleWin_t::setAutoFireOffFrames(void)
 {
-	int ret;
+	int ret, autoFireOnFrames, autoFireOffFrames;
 	QInputDialog dialog(this);
+
+	GetAutoFirePattern( &autoFireOnFrames, &autoFireOffFrames );
 
 	dialog.setWindowTitle( tr("AutoFire Pattern OFF Frames") );
 	dialog.setLabelText( tr("Specify desired number of OFF frames in autofire pattern:") );
@@ -3108,7 +3124,9 @@ void consoleWin_t::setAutoFireOffFrames(void)
 	
 	if ( QDialog::Accepted == ret )
 	{
-	   autoFireOffFrames = dialog.intValue();
+		autoFireOffFrames = dialog.intValue();
+
+		SetAutoFirePattern( autoFireOnFrames, autoFireOffFrames );
 	}
 }
 
