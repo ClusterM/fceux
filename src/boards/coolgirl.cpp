@@ -2251,4 +2251,3 @@ void COOLGIRL_Init(CartInfo *info) {
 	info->Close = COOLGIRL_Close;
 	GameStateRestore = COOLGIRL_Restore;
 }
-
