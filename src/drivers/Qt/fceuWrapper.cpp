@@ -401,6 +401,12 @@ CloseGame(void)
 {
 	std::string filename;
 
+	if ( nes_shm )
+	{	// Clear Screen on Game Close
+		nes_shm->clear_pixbuf();
+		nes_shm->blitUpdated = 1;
+	}
+
 	if (!isloaded) {
 		return(0);
 	}
@@ -739,6 +745,13 @@ int  fceuWrapperInit( int argc, char *argv[] )
 
 	g_config->getOption ("SDL.DrawInputAids", &drawInputAidsEnable);
 
+	// Initialize Autofire Pattern
+	int autofireOnFrames=1, autofireOffFrames=1;
+	g_config->getOption ("SDL.AutofireOnFrames" , &autofireOnFrames );
+	g_config->getOption ("SDL.AutofireOffFrames", &autofireOffFrames);
+
+	SetAutoFirePattern( autofireOnFrames, autofireOffFrames );
+
 	// check to see if recording HUD to AVI is enabled
 	int rh;
 	g_config->getOption("SDL.RecordHUD", &rh);
@@ -948,13 +961,7 @@ int  fceuWrapperInit( int argc, char *argv[] )
 	}
 #endif
 	
-	{
-		int id;
-		g_config->getOption("SDL.NewPPU", &id);
-		if (id)
-			newppu = 1;
-	}
-
+	g_config->getOption("SDL.NewPPU", &newppu);
 	g_config->getOption("SDL.Frameskip", &frameskip);
 
 	return 0;

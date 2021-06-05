@@ -16,6 +16,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QTimer>
 #include <QThread>
 #include <QCursor>
@@ -70,6 +72,29 @@ class  consoleMenuBar : public QMenuBar
 	protected:
 		void keyPressEvent(QKeyEvent *event);
 		void keyReleaseEvent(QKeyEvent *event);
+};
+
+class  autoFireMenuAction : public QAction
+{
+	Q_OBJECT
+
+	public:
+		autoFireMenuAction(int on, int off, QString name, QWidget *parent = 0);
+		~autoFireMenuAction(void);
+
+		bool isMatch( int on, int off );
+
+		void setPattern( int on, int off );
+
+		int  getOnValue(void){ return onFrames; };
+		int  getOffValue(void){ return offFrames; };
+
+	public slots:
+		void activateCB(void);
+
+	private:
+		int  onFrames;
+		int  offFrames;
 };
 
 class  consoleRecentRomAction : public QAction
@@ -225,6 +250,8 @@ class  consoleWin_t : public QMainWindow
 		bool        mainMenuPauseWhenActv;
 
 		std::list <std::string*> romList;
+		std::vector <autoFireMenuAction*> afActList;
+		autoFireMenuAction *afActCustom;
 
 		unsigned int updateCounter;
 	protected:
@@ -232,6 +259,8 @@ class  consoleWin_t : public QMainWindow
 		void closeEvent(QCloseEvent *event);
 		void keyPressEvent(QKeyEvent *event);
 		void keyReleaseEvent(QKeyEvent *event);
+		void dragEnterEvent(QDragEnterEvent *event);
+		void dropEvent(QDropEvent *event);
 		void syncActionConfig( QAction *act, const char *property );
 		void showErrorMsgWindow(void);
 
@@ -245,6 +274,7 @@ class  consoleWin_t : public QMainWindow
 		void changeState(int slot);
 		void saveState(int slot);
 		void loadState(int slot);
+		void syncAutoFirePatternMenu(void);
 
 	public slots:
 		void openDebugWindow(void);
@@ -331,8 +361,7 @@ class  consoleWin_t : public QMainWindow
 		void recordMovie(void);
 		void recordMovieAs(void);
 		void playMovieFromBeginning(void);
-		void setAutoFireOnFrames(void);
-		void setAutoFireOffFrames(void);
+		void setCustomAutoFire(void);
 		void incrSoundVolume(void);
 		void decrSoundVolume(void);
 		void toggleLagCounterDisplay(void);

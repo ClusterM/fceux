@@ -23,6 +23,7 @@
 #include "Qt/throttle.h"
 #include "Qt/config.h"
 
+#include "fceu.h"
 #include "../common/cheat.h"
 
 #include "Qt/input.h"
@@ -529,6 +530,10 @@ InitConfig()
 	config->addOption("input4", "SDL.Input.3", "Gamepad.3");
 
 	config->addOption("autoInputPreset", "SDL.AutoInputPreset", 0);
+	config->addOption("SDL.AutofireOnFrames" , 1);
+	config->addOption("SDL.AutofireOffFrames", 1);
+	config->addOption("SDL.AutofireCustomOnFrames" , 1);
+	config->addOption("SDL.AutofireCustomOffFrames", 1);
 
 	// display input
 	config->addOption("inputdisplay", "SDL.InputDisplay", 0);
@@ -836,6 +841,8 @@ UpdateEMUCore(Config *config)
 	if(cpalette.size()) {
 		LoadCPalette(cpalette);
 	}
+
+	config->getOption("SDL.NewPPU", &newppu);
 
 	config->getOption("SDL.PAL", &region);
 	FCEUI_SetRegion(region);

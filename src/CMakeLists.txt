@@ -35,6 +35,7 @@ if(WIN32)
      set( OPENGL_LDFLAGS  OpenGL::GL )
      set( SDL2_LDFLAGS  ${SDL_INSTALL_PREFIX}/SDL2/lib/x64/SDL2.lib )
      set( SYS_LIBS  wsock32 ws2_32 vfw32 )
+     set(APP_ICON_RESOURCES_WINDOWS  ${CMAKE_SOURCE_DIR}/icons/fceux.rc )
 else(WIN32)
   # Non Windows System
   # UNIX (Linux or Mac OSX)
@@ -100,7 +101,6 @@ else(WIN32)
   pkg_search_module( LUA lua5.1 lua-5.1 )
 
   add_definitions( -DHAVE_ASPRINTF ) # What system wouldn't have this?
-  #add_definitions( -DCREATE_AVI    ) 
 
   if(APPLE)
 	set( OPENGL_LDFLAGS  "-framework OpenGL" )
@@ -520,9 +520,12 @@ set_source_files_properties( ${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION "Res
 
 add_executable(  ${APP_NAME}  MACOSX_BUNDLE ${APP_ICON} ${SOURCES} ../resources.qrc 
 	${CMAKE_CURRENT_BINARY_DIR}/fceux_git_info.cpp)
+elseif (WIN32)
 
+add_executable(  ${APP_NAME}  ${SOURCES} ../resources.qrc 
+	${CMAKE_CURRENT_BINARY_DIR}/fceux_git_info.cpp
+	${APP_ICON_RESOURCES_WINDOWS} )
 else()
-
 add_executable(  ${APP_NAME}  ${SOURCES} ../resources.qrc 
 	${CMAKE_CURRENT_BINARY_DIR}/fceux_git_info.cpp)
 endif()
