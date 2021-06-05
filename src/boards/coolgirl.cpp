@@ -137,6 +137,10 @@ static uint8 mapper83_irq_enabled = 0;
 static uint16 mapper83_irq_counter = 0;
 // for mapper #90
 static uint8 mapper90_xor = 0;
+// for mapper #67
+static uint8 mapper67_irq_enabled = 0;
+static uint8 mapper67_irq_latch = 0;
+static uint16 mapper67_irq_counter = 0;
 
 static uint8 flash_state = 0;
 static uint16 flash_buffer_a[10];
@@ -304,7 +308,7 @@ static void COOLGIRL_Sync_CHR(void) {
 
 	// enable or disable writes to CHR RAM, setup CHR mask
 	SetupCartCHRMapping(CHR_RAM_CHIP, CHR_RAM, ((~(chr_mask >> 13) & 0x3F) + 1) * 0x2000, can_write_chr);
-	
+
 	switch (chr_mode & 7)
 	{
 	default:
@@ -1713,6 +1717,46 @@ static DECLFW(COOLGIRL_WRITE) {
 				break;
 			}
 		}
+
+		// Mapper #67 - Sunsoft-3
+		if (mapper == 0b100100)
+		{
+			if (get_bits(A, "11")) // if (cpu_addr_in[11])
+			{
+				switch (get_bits(A, "14:12")) // case (cpu_addr_in[14:12])
+				{
+				case 0b000: // 3'b000: chr_bank_a[6:1] <= cpu_data_in[5:0]; // $8800
+					SET_BITS(chr_bank_a, "6:1", V, "5:0"); break;
+				case 0b001: // 3'b001: chr_bank_c[6:1] <= cpu_data_in[5:0]; // $9800
+					SET_BITS(chr_bank_c, "6:1", V, "5:0"); break;
+				case 0b010: // 3'b010: chr_bank_e[6:1] <= cpu_data_in[5:0]; // $A800
+					SET_BITS(chr_bank_e, "6:1", V, "5:0"); break;
+				case 0b011: // 3'b011: chr_bank_g[6:1] <= cpu_data_in[5:0]; // $B800
+					SET_BITS(chr_bank_g, "6:1", V, "5:0"); break;
+				case 0b100: // 3'b100: begin // $C800, IRQ load
+					mapper67_irq_latch = ~mapper67_irq_latch;
+					if (mapper67_irq_latch)
+						SET_BITS(mapper67_irq_counter, "15:8", V, "7:0"); // mapper67_irq_counter[15:8] <= cpu_data_in[7:0];
+					else
+						SET_BITS(mapper67_irq_counter, "7:0", V, "7:0"); // mapper67_irq_counter[7:0] <= cpu_data_in[7:0];
+					break;
+				case 0b101: // 3'b101: begin // $D800, IRQ enable
+					mapper67_irq_latch = 0; // mapper67_irq_latch <= 0;
+					SET_BITS(mapper67_irq_enabled, "0", V, "4"); // mapper67_irq_enabled <= cpu_data_in[4];
+					break;
+				case 0b110: // 3'b110: mirroring[1:0] <= cpu_data_in[1:0];  // $E800
+					SET_BITS(mirroring, "1:0", V, "1:0");
+					break;
+				case 0b111: // 3'b111: prg_bank_a[4:1] <= cpu_data_in[3:0]; // $F800
+					SET_BITS(prg_bank_a, "4:1", V, "3:0");
+					break;
+				}
+			}
+			else {
+				// Interrupt Acknowledge ($8000)
+				X6502_IRQEnd(FCEU_IQEXT); // mapper67_irq_out <= 0;
+			}
+		}
 	}
 
 	COOLGIRL_Sync();
@@ -1940,6 +1984,17 @@ static void COOLGIRL_CpuCounter(int a) {
 			if (mapper83_irq_counter == 0) // if (mapper83_irq_counter == 0)
 				X6502_IRQBegin(FCEU_IQEXT); // mapper83_irq_out <= 1;
 			mapper83_irq_counter--; // mapper83_irq_counter = mapper83_irq_counter - 1'b1;
+		}
+
+		// Mapper #67 - Sunsoft-3
+		if (mapper67_irq_enabled)
+		{
+			mapper67_irq_counter--; // mapper67_irq_counter = mapper67_irq_counter - 1'b1;
+			if (mapper67_irq_counter == 0xFFFF) // if (mapper67_irq_counter == 16'hFFFF)
+			{
+				X6502_IRQBegin(FCEU_IQEXT); // mapper67_irq_out <= 1; // fire IRQ
+				mapper67_irq_enabled = 0; // mapper67_irq_enabled <= 0; // disable IRQ
+			}
 		}
 	}
 }
@@ -2183,6 +2238,9 @@ void COOLGIRL_Init(CartInfo *info) {
 	ExState(mapper83_irq_enabled, "M83I");
 	ExState(mapper83_irq_counter, "M83C");
 	ExState(mapper90_xor, "90XR");
+	ExState(mapper67_irq_enabled, "67IE");
+	ExState(mapper67_irq_latch, "67IL");
+	ExState(mapper67_irq_counter, "67IC");
 	ExState(flash_state, "FLST");
 	ExState(flash_buffer_a, "FLBA");
 	ExState(flash_buffer_v, "FLBV");
