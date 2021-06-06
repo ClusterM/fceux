@@ -1430,11 +1430,25 @@ static DECLFW(COOLGIRL_WRITE) {
 		*/
 		if (mapper == 0b011000)
 		{
-			uint8 vrc_2b_hi = ((A >> 1) & 1) | ((A >> 3) & 1) | ((A >> 5) & 1) | ((A >> 7) & 1);
-			uint8 vrc_2b_low = (A & 1) | ((A >> 2) & 1) | ((A >> 4) & 1) | ((A >> 6) & 1);
+			uint8 vrc_2b_hi =
+				(flags & 5) == 0 ? // (!flags[0] && !flags[2]) ?
+				(get_bits(A, "7") | get_bits(A, "2")) // | cpu_addr_in[7] | cpu_addr_in[2]) // mapper #21
+				: (flags & 5) == 1 ? //: (flags[0] && !flags[2]) ?
+				get_bits(A, "0") // (cpu_addr_in[0]) // mapper #22
+				: (flags & 5) == 4 ? // : (!flags[0] && flags[2]) ?
+				(get_bits(A, "5") | get_bits(A, "3") | get_bits(A, "1")) // (cpu_addr_in[5] | cpu_addr_in[3] | cpu_addr_in[1]) // mapper #23
+				: (get_bits(A, "2") | get_bits(A, "0")); // : (cpu_addr_in[2] | cpu_addr_in[0]); // mapper #25
+			uint8 vrc_2b_low =
+				(flags & 5) == 0 ? // (!flags[0] && !flags[2]) ?
+				(get_bits(A, "6") | get_bits(A, "1")) // (cpu_addr_in[6] | cpu_addr_in[1]) // mapper #21
+				: (flags & 5) == 1 ? // : (flags[0] && !flags[2]) ?
+				get_bits(A, "1") // (cpu_addr_in[1]) // mapper #22
+				: (flags & 5) == 4 ?// : (!flags[0] && flags[2]) ?
+				(get_bits(A, "4") | get_bits(A, "2") | get_bits(A, "0")) // (cpu_addr_in[4] | cpu_addr_in[2] | cpu_addr_in[0]) // mapper #23
+				: (get_bits(A, "3") | get_bits(A, "1")); // : (cpu_addr_in[3] | cpu_addr_in[1]); // mapper #25
 
-			// case ({ cpu_addr_in[14:12], flags[0] ? vrc_2b_low : vrc_2b_hi, flags[0] ? vrc_2b_hi : vrc_2b_low })
-			switch ((get_bits(A, "14:12") << 2) | (((flags & 1) ? vrc_2b_low : vrc_2b_hi) << 1) | ((flags & 1) ? vrc_2b_hi : vrc_2b_low))
+			// case ({ cpu_addr_in[14:12], vrc_2b_hi, vrc_2b_low })
+			switch ((get_bits(A, "14:12") << 2) | (vrc_2b_hi << 1) | vrc_2b_low)
 			{
 			case 0b00000: // $8000-$8003, PRG0
 			case 0b00001:
@@ -1496,8 +1510,8 @@ static DECLFW(COOLGIRL_WRITE) {
 			// if (cpu_addr_in[14:12] == 3'b111)
 			if (get_bits(A, "14:12") == 0b111)
 			{
-				// case ({flags[0] ? vrc_2b_low : vrc_2b_hi, flags[0] ? vrc_2b_hi : vrc_2b_low}) 
-				switch ((((flags & 1) ? vrc_2b_low : vrc_2b_hi) << 1) | ((flags & 1) ? vrc_2b_hi : vrc_2b_low))
+				// case (vrc_2b_hi, vrc_2b_low})
+				switch ((vrc_2b_hi << 1) | vrc_2b_low)
 				{
 				case 0b00: // 2'b00: vrc4_irq_latch[3:0] = cpu_data_in[3:0];  // IRQ latch low
 					SET_BITS(vrc4_irq_latch, "3:0", V, "3:0"); break;
