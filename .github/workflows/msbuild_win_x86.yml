@@ -12,7 +12,7 @@ env:
   BUILD_CONFIGURATION: Release
   PLATFORM: Win32
   OUTPUT_FILE: fceux.zip
-  OUTPUT_SUBDIRECTORY: fceux64
+  OUTPUT_SUBDIRECTORY: fceux
 
 jobs:
   build_and_deploy:
