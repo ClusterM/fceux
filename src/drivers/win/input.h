@@ -13,6 +13,9 @@
 #define CMD_KEY_LALT			(1<<20)
 #define CMD_KEY_RALT			(1<<21)
 #define CMD_KEY_ALT				(CMD_KEY_LALT|CMD_KEY_RALT)
+#define CMD_KEY_LWIN			(1<<22)
+#define CMD_KEY_RWIN			(1<<23)
+#define CMD_KEY_WIN				(CMD_KEY_LWIN|CMD_KEY_RWIN)
 
 void ConfigInput(HWND hParent);
 int InitDInput(void);
@@ -43,7 +46,7 @@ extern uint8 BWorldData[1 + 13 + 1];
 typedef struct {
         uint8  ButtType[MAXBUTTCONFIG];
         uint8  DeviceNum[MAXBUTTCONFIG];
-        uint16 ButtonNum[MAXBUTTCONFIG];
+        int ButtonNum[MAXBUTTCONFIG];
         uint32 NumC;
         GUID DeviceInstance[MAXBUTTCONFIG];
         //uint64 DeviceID[MAXBUTTCONFIG];        /* TODO */
@@ -65,10 +68,13 @@ void ParseGIInput(FCEUGI *GameInfo);
 void SetEmulationSpeed(int type);
 int FCEUD_TestCommandState(int c);
 void FCEUD_UpdateInput();
+int DWaitButton(HWND hParent, const char *text, ButtConfig *bc);
+int DTestButton(ButtConfig *bc, uint8_t just_down = 0);
+char *MakeButtString(ButtConfig *bc, int appendKB = 1);
 
 extern CFGSTRUCT HotkeyConfig[];
 
-extern int FCEUD_CommandMapping[EMUCMD_MAX];
+extern ButtConfig FCEUD_CommandMapping[EMUCMD_MAX];
 
 #endif
 
