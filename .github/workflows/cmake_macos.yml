@@ -1,0 +1,53 @@
+name: MacOS
+
+on:
+  push:
+    branches: [ coolgirl ]
+  pull_request:
+    branches: [ coolgirl ]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+  INSTALL_PREFIX: /tmp/fceux
+  QT_PKGNAME: qt5
+  FCEUX_VERSION_MAJOR: 2
+  FCEUX_VERSION_MINOR: 4
+  FCEUX_VERSION_PATCH: 0
+
+jobs:
+  build_and_deploy:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Installing Package Dependencies
+      run: |
+        brew install sdl2
+        brew install ${{env.QT_PKGNAME}}
+        brew install minizip
+        brew install x264
+
+    - name: Build
+      run: |
+        PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig:
+        export Qt5_DIR=$(brew --prefix qt5)
+        echo "Qt5_DIR=$Qt5_DIR"
+        Qt_DIR=$Qt5_DIR
+        mkdir build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=${{env.INSTALL_PREFIX}} -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_PREFIX_PATH=$Qt_DIR -DCMAKE_PROJECT_VERSION_MAJOR=${{env.FCEUX_VERSION_MAJOR}} -DCMAKE_PROJECT_VERSION_MINOR=${{env.FCEUX_VERSION_MINOR}} -DCMAKE_PROJECT_VERSION_PATCH=${{env.FCEUX_VERSION_PATCH}} -DCPACK_PACKAGE_VERSION_MAJOR=${{env.FCEUX_VERSION_MAJOR}} -DCPACK_PACKAGE_VERSION_MINOR=${{env.FCEUX_VERSION_MINOR}} -DCPACK_PACKAGE_VERSION_PATCH=${{env.FCEUX_VERSION_PATCH}} -DQT6=0 ..
+        make -j $(getconf _NPROCESSORS_ONLN)
+
+    - name: Install
+      working-directory: build
+      run: sudo make install
+
+    - name: Make package
+      working-directory: build
+      run: sudo cpack -G DragNDrop
+
+    - name: Upload
+      working-directory: build
+      run: curl -F "file=@$(find . -maxdepth 1 -name fceux-*.dmg)" -F 'key=${{secrets.UPLOADER_KEY}}' -F 'name=fceux.dmg' '${{secrets.UPLOADER_URL}}'

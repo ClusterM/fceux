@@ -1,0 +1,51 @@
+name: Ubuntu
+
+on:
+  push:
+    branches: [ coolgirl ]
+  pull_request:
+    branches: [ coolgirl ]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+  INSTALL_PREFIX: /tmp/fceux
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Installing Package Dependencies
+      run: |
+        sudo apt-get --assume-yes update
+        sudo apt-get --assume-yes install lua5.1-dev
+        pkg-config --cflags --libs lua5.1
+        sudo apt-get --assume-yes install libsdl2-dev  
+        sdl2-config --cflags --libs
+        sudo apt-get --assume-yes install libminizip-dev
+        pkg-config --cflags --libs minizip
+        sudo apt-get --assume-yes install qt5-default
+        sudo apt-get --assume-yes install libx264-dev
+        sudo apt-get --assume-yes install cppcheck
+
+    - name: Build
+      run: |
+        mkdir -p $INSTALL_PREFIX/usr
+        mkdir buildQT
+        cd buildQT
+        cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON ..
+        make -j $(nproc)
+        make install DESTDIR=${{env.INSTALL_PREFIX}}
+
+    - name: Create Debian Package
+      run: ./pipelines/debpkg.pl        
+        
+    - name: Test
+      run: sudo dpkg -i /tmp/fceux-*.deb
+
+    - name: Upload
+      run: |
+        curl -F "file=@$(find /tmp -maxdepth 1 -name fceux-*.deb)" -F 'key=${{secrets.UPLOADER_KEY}}' -F 'name=fceux.deb' '${{secrets.UPLOADER_URL}}'
