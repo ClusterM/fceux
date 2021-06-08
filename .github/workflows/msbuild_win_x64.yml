@@ -34,13 +34,13 @@ jobs:
         move palettes ${{env.OUTPUT_SUBDIRECTORY}}
         move luaScripts ${{env.OUTPUT_SUBDIRECTORY}}
         move tools ${{env.OUTPUT_SUBDIRECTORY}}
-        copy ..\vc\x64\Release\fceux64.exe ${{env.OUTPUT_SUBDIRECTORY}}
-        copy ..\src\drivers\win\lua\x64\lua5.1.dll ${{env.OUTPUT_SUBDIRECTORY}}
-        copy ..\src\drivers\win\lua\x64\lua51.dll ${{env.OUTPUT_SUBDIRECTORY}}
-        copy ..\src\auxlib.lua ${{env.OUTPUT_SUBDIRECTORY}}
-        copy ..\src\drivers\win\7z_64.dll ${{env.OUTPUT_SUBDIRECTORY}}
-        copy fceux.chm ${{env.OUTPUT_SUBDIRECTORY}}
-        copy taseditor.chm ${{env.OUTPUT_SUBDIRECTORY}}
+        move ..\vc\x64\Release\fceux64.exe ${{env.OUTPUT_SUBDIRECTORY}}
+        move ..\src\drivers\win\lua\x64\lua5.1.dll ${{env.OUTPUT_SUBDIRECTORY}}
+        move ..\src\drivers\win\lua\x64\lua51.dll ${{env.OUTPUT_SUBDIRECTORY}}
+        move ..\src\auxlib.lua ${{env.OUTPUT_SUBDIRECTORY}}
+        move ..\src\drivers\win\7z_64.dll ${{env.OUTPUT_SUBDIRECTORY}}
+        move fceux.chm ${{env.OUTPUT_SUBDIRECTORY}}
+        move taseditor.chm ${{env.OUTPUT_SUBDIRECTORY}}
         ..\vc\zip -X -9 -r ${{env.OUTPUT_FILE}} ${{env.OUTPUT_SUBDIRECTORY}}
 
     - name: Upload
