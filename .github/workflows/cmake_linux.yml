@@ -41,7 +41,9 @@ jobs:
         make install DESTDIR=${{env.INSTALL_PREFIX}}
 
     - name: Create Debian Package
-      run: ./pipelines/debpkg.pl        
+      run: |
+        sed -i 's/Package: fceux/Package: fceux-coolgirl/g' ./pipelines/debpkg.pl
+        ./pipelines/debpkg.pl
         
     - name: Test
       run: sudo dpkg -i /tmp/fceux-*.deb
