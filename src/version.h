@@ -44,7 +44,7 @@
 #elif defined(PUBLIC_RELEASE)
 #define FCEU_SUBVERSION_STRING ""
 #else
-#define FCEU_SUBVERSION_STRING "-interim git" SCM_REV_STR
+#define FCEU_SUBVERSION_STRING "-coolgirl git" SCM_REV_STR
 #endif
 
 #if defined(_MSC_VER)
