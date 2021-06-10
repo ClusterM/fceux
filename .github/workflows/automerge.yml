@@ -7,7 +7,7 @@ on:
 
 env:
   MY_REPO: https://github.com/ClusterM/fceux.git
-  MY_BRANCH: coolgirl
+  MY_BRANCH: automerge
   MASTER_REPO: https://github.com/TASVideos/fceux.git
   MASTER_BRANCH: master
 
