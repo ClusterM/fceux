@@ -19,7 +19,7 @@ jobs:
     - name: Merge with master
       run: |
         git config pull.rebase false
-        git clone ${{env.MY_REPO} -b ${{env.MY_BRANCH} tmp
+        git clone ${{env.MY_REPO}} -b ${{env.MY_BRANCH}} tmp
         cd tmp
         git status
         git branch
