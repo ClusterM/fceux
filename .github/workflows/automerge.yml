@@ -16,6 +16,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Debug
+      run: |
+        git status
+        git branch
+        git log
+
     - name: Merge with master
       run: |
         git config pull.rebase false
