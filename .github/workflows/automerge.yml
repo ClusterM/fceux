@@ -1,0 +1,22 @@
+name: Automerge
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  '0 3 * * *'
+
+env:
+  MASTER_REPO: https://github.com/TASVideos/fceux.git
+  MASTER_BRANCH: master
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Merge with master
+      run: |
+        git pull ${{env.MASTER_REPO}} ${{env.MASTER_BRANCH}}
+        git push
