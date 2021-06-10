@@ -18,11 +18,11 @@ jobs:
     steps:
     - name: Merge with master
       run: |
-        git config pull.rebase false
         git clone ${{env.MY_REPO}} -b ${{env.MY_BRANCH}} tmp
         cd tmp
         git status
         git branch
         git log
+        git config pull.rebase false
         git pull ${{env.MASTER_REPO}} ${{env.MASTER_BRANCH}}
         git push
