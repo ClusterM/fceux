@@ -18,5 +18,6 @@ jobs:
 
     - name: Merge with master
       run: |
+        git config pull.rebase false
         git pull ${{env.MASTER_REPO}} ${{env.MASTER_BRANCH}}
         git push
