@@ -6,7 +6,7 @@ on:
     - cron:  '0 3 * * *'
 
 env:
-  MY_REPO: https://github.com/ClusterM/fceux.git
+  MY_REPO: https://Cluster_M:${{secrets.GITHUB_TOKEN}}@github.com/ClusterM/fceux.git
   MY_BRANCH: automerge
   MASTER_REPO: https://github.com/TASVideos/fceux.git
   MASTER_BRANCH: master
