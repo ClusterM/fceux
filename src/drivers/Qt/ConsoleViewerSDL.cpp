@@ -214,14 +214,21 @@ int ConsoleViewSDL_t::init(void)
 	    SDL_SetHint( SDL_HINT_RENDER_SCALE_QUALITY, "0" );
 	}
 
-	if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) 
+	if ( SDL_WasInit(SDL_INIT_VIDEO) == 0 )
 	{
-		printf("[SDL] Failed to initialize video subsystem.\n");
-		return -1;
+		if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) 
+		{
+			printf("[SDL] Failed to initialize video subsystem.\n");
+			return -1;
+		}
+		else
+		{
+			printf("Initialized SDL Video Subsystem\n");
+		}
 	}
 	else
 	{
-		printf("Initialized SDL Video Subsystem\n");
+		printf("SDL Video Subsystem is Initialized\n");
 	}
 
 	for (int i=0; i<SDL_GetNumVideoDrivers(); i++)
@@ -232,16 +239,18 @@ int ConsoleViewSDL_t::init(void)
 
 	windowHandle = this->winId();
 
-	//printf("Window Handle: %llu \n", windowHandle );
+	if (sdlWindow == NULL) 
+	{
+		sdlWindow = SDL_CreateWindowFrom( (void*)windowHandle);
+	}
 
-	//sleep(1);
-
-	sdlWindow = SDL_CreateWindowFrom( (void*)windowHandle);
 	if (sdlWindow == NULL) 
 	{
 		printf("[SDL] Failed to create window from handle.\n");
 		return -1;
 	}
+
+	SDL_ShowWindow( sdlWindow );
 
 	uint32_t baseFlags = vsyncEnabled ? SDL_RENDERER_PRESENTVSYNC : 0;
 
@@ -288,6 +297,11 @@ void ConsoleViewSDL_t::cleanup(void)
 	{
 		SDL_DestroyRenderer(sdlRenderer);
 		sdlRenderer = NULL;
+	}
+	if ( sdlWindow )
+	{
+		SDL_DestroyWindow( sdlWindow );
+		sdlWindow = NULL;
 	}
 }
 
@@ -422,7 +436,7 @@ void ConsoleViewSDL_t::resizeEvent(QResizeEvent *event)
 	s = event->size();
 	view_width  = s.width();
 	view_height = s.height();
-	//printf("SDL Resize: %i x %i \n", view_width, view_height);
+	printf("SDL Resize: %i x %i \n", view_width, view_height);
 
 	gui_draw_area_width = view_width;
 	gui_draw_area_height = view_height;
