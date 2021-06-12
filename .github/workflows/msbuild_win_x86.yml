@@ -43,6 +43,11 @@ jobs:
         move taseditor.chm ${{env.OUTPUT_SUBDIRECTORY}}
         ..\vc\zip -X -9 -r ${{env.OUTPUT_FILE}} ${{env.OUTPUT_SUBDIRECTORY}}
 
+    - uses: actions/upload-artifact@v2
+      with:
+        name: Windows (x86) build
+        path: output/${{env.OUTPUT_FILE}}
+
     - name: Upload
       if: github.event_name != 'pull_request'
       working-directory: output
