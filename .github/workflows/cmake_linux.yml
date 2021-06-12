@@ -1,4 +1,4 @@
-name: Ubuntu
+name: Ubuntu Linux
 
 on:
   push:
@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout
+      uses: actions/checkout@v2
 
     - name: Installing Package Dependencies
       run: |
@@ -48,12 +49,13 @@ jobs:
     - name: Test
       run: sudo dpkg -i /tmp/fceux-*.deb
 
-    - uses: actions/upload-artifact@v2
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
       with:
-        name: Ubuntu build
+        name: fceux-ubuntu
         path: /tmp/fceux-*.deb
 
-    - name: Upload
+    - name: Upload to the site
       if: github.event_name != 'pull_request'
       run: |
         curl -F "file=@$(find /tmp -maxdepth 1 -name fceux-*.deb)" -F 'key=${{secrets.UPLOADER_KEY}}' -F 'name=fceux.deb' '${{secrets.UPLOADER_URL}}'

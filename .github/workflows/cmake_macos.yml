@@ -20,7 +20,8 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout
+      uses: actions/checkout@v2
 
     - name: Installing Package Dependencies
       run: |
@@ -48,12 +49,13 @@ jobs:
       working-directory: build
       run: sudo cpack -G DragNDrop
 
-    - uses: actions/upload-artifact@v2
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
       with:
-        name: macOS build
+        name: fceux-macos
         path: build/fceux-*.dmg
 
-    - name: Upload
+    - name: Upload to the site
       if: github.event_name != 'pull_request'
       working-directory: build
       run: curl -F "file=@$(find . -maxdepth 1 -name fceux-*.dmg)" -F 'key=${{secrets.UPLOADER_KEY}}' -F 'name=fceux.dmg' '${{secrets.UPLOADER_URL}}'

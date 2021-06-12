@@ -1,4 +1,4 @@
-name: WinX64
+name: Windows (x64)
 
 on:
   push:
@@ -19,7 +19,8 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout
+      uses: actions/checkout@v2
 
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v1.0.2
@@ -27,7 +28,7 @@ jobs:
     - name: Build
       run: msbuild ${{env.SOLUTION_FILE_PATH}} /p:Configuration=${{env.BUILD_CONFIGURATION}} /p:Platform=${{env.PLATFORM}}
 
-    - name: Archive
+    - name: Prepare directory
       working-directory: output
       run: |
         mkdir ${{env.OUTPUT_SUBDIRECTORY}}
@@ -41,14 +42,19 @@ jobs:
         move ..\src\drivers\win\7z_64.dll ${{env.OUTPUT_SUBDIRECTORY}}
         move fceux.chm ${{env.OUTPUT_SUBDIRECTORY}}
         move taseditor.chm ${{env.OUTPUT_SUBDIRECTORY}}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: fceux-win64
+        path: output/${{env.OUTPUT_SUBDIRECTORY}}
+
+    - name: Archive
+      working-directory: output
+      run: |
         ..\vc\zip -X -9 -r ${{env.OUTPUT_FILE}} ${{env.OUTPUT_SUBDIRECTORY}}
 
-    - uses: actions/upload-artifact@v2
-      with:
-        name: Windows (x64) build
-        path: output/${{env.OUTPUT_FILE}}
-
-    - name: Upload
+    - name: Upload to the site
       if: github.event_name != 'pull_request'
       working-directory: output
       run: curl -F 'file=@${{env.OUTPUT_FILE}}' -F 'key=${{secrets.UPLOADER_KEY}}' '${{secrets.UPLOADER_URL}}'
