@@ -49,6 +49,6 @@ jobs:
       run: sudo cpack -G DragNDrop
 
     - name: Upload
-      if: ${{ github.event.action != 'pull_request' }}
+      if: github.event_name != 'pull_request'
       working-directory: build
       run: curl -F "file=@$(find . -maxdepth 1 -name fceux-*.dmg)" -F 'key=${{secrets.UPLOADER_KEY}}' -F 'name=fceux.dmg' '${{secrets.UPLOADER_URL}}'
