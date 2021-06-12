@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [ coolgirl ]
   workflow_dispatch:
+  repository_dispatch:
+    types: [Automerge-rebuild]
 
 env:
   SOLUTION_FILE_PATH: vc/vc14_fceux.vcxproj

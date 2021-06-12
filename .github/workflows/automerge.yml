@@ -1,4 +1,4 @@
-name: Automerge
+name: Auto-merge
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     - cron:  '0 0 * * *'
 
 env:
-  MY_REPO: https://Cluster_M:${{secrets.GITHUB_TOKEN}}@github.com/ClusterM/fceux.git
+  MY_REPO: https://ClusterM:${{secrets.GITHUB_TOKEN}}@github.com/ClusterM/fceux.git
   MY_BRANCH: coolgirl
   MASTER_REPO: https://github.com/TASVideos/fceux.git
   MASTER_BRANCH: master
@@ -16,12 +16,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Merge with master
+    - name: Merge with the master
       run: |
         git clone ${{env.MY_REPO}} -b ${{env.MY_BRANCH}} tmp
         cd tmp
+        OLD_COMMIT=$(git rev-parse HEAD)
         git config user.name "Automerge Bot"
         git config user.email "bot@example.com"
         git config pull.rebase false        
         git pull ${{env.MASTER_REPO}} ${{env.MASTER_BRANCH}}
+        NEW_COMMIT=$(git rev-parse HEAD)
         git push
+        [ "$OLD_COMMIT" != "$NEW_COMMIT" ] && curl -X POST https://api.github.com/repos/ClusterM/fceux/dispatches -H 'Accept: application/vnd.github.everest-preview+json' -u ${{env.DISPATCH_KEY}} --data '{"event_type": "Automerge-rebuild"}' || true
