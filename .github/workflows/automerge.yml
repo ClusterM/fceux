@@ -27,4 +27,4 @@ jobs:
         git pull ${{env.MASTER_REPO}} ${{env.MASTER_BRANCH}}
         NEW_COMMIT=$(git rev-parse HEAD)
         git push
-        [ "$OLD_COMMIT" != "$NEW_COMMIT" ] && curl -X POST https://api.github.com/repos/ClusterM/fceux/dispatches -H 'Accept: application/vnd.github.everest-preview+json' -u ${{env.DISPATCH_KEY}} --data '{"event_type": "Automerge-rebuild"}' || true
+        [ "$OLD_COMMIT" != "$NEW_COMMIT" ] && curl -X POST https://api.github.com/repos/ClusterM/fceux/dispatches -H 'Accept: application/vnd.github.everest-preview+json' -u ${{secrets.DISPATCH_KEY}} --data '{"event_type": "Automerge-rebuild"}' || true
