@@ -27,4 +27,17 @@ jobs:
         git pull ${{env.MASTER_REPO}} ${{env.MASTER_BRANCH}}
         NEW_COMMIT=$(git rev-parse HEAD)
         git push
-        [ "$OLD_COMMIT" != "$NEW_COMMIT" ] && curl -X POST https://api.github.com/repos/ClusterM/fceux/dispatches -H 'Accept: application/vnd.github.everest-preview+json' -u ${{secrets.DISPATCH_KEY}} --data '{"event_type": "Automerge-rebuild"}' || true
+        if [ "$OLD_COMMIT" != "$NEW_COMMIT" ]
+        then
+          echo "Successfully merged with master branch"
+          echo "New commit: $NEW_COMMIT"
+          echo "Lets send rebuild request!"
+          OUTPUT=$(curl -s -X POST https://api.github.com/repos/ClusterM/fceux/dispatches -H 'Accept: application/vnd.github.everest-preview+json' -u ${{secrets.DISPATCH_KEY}} --data '{"event_type": "Automerge-rebuild"}')
+          if [ ! -z "$OUTPUT" ]
+          then
+            echo "::error curl output: $OUTPUT"
+            exit 1
+          fi
+        else
+          echo "::warning::Everything already up to date"
+        fi
