@@ -29,8 +29,8 @@ jobs:
         git push
         if [ "$OLD_COMMIT" != "$NEW_COMMIT" ]
         then
-          echo "Successfully merged with master branch"
-          echo "New commit: $NEW_COMMIT"
+          echo "::debug::Successfully merged with master branch"
+          echo "::debug::New commit: $NEW_COMMIT"
           echo "Lets send rebuild request!"
           OUTPUT=$(curl -s -X POST https://api.github.com/repos/ClusterM/fceux/dispatches -H 'Accept: application/vnd.github.everest-preview+json' -u ${{secrets.DISPATCH_KEY}} --data '{"event_type": "Automerge-rebuild"}')
           if [ ! -z "$OUTPUT" ]
@@ -39,5 +39,5 @@ jobs:
             exit 1
           fi
         else
-          echo "::warning::Everything already up to date"
+          echo "::warning::Everything is already up to date"
         fi
