@@ -1141,6 +1141,11 @@ static DECLFW(COOLGIRL_WRITE) {
 						break;
 					case 0b01: // 2'b01
 						SET_BITS(chr_bank_a, "6:2", mmc1_load_register, "5:1"); // chr_bank_a[6:2] = mmc1_load_register[5:1];
+						if (flags & 1) // (flags[0]) - 16KB of SRAM
+						{
+							// PRG RAM page #2 is battery backed
+							sram_page = 2 | get_bits(mmc1_load_register, "4") ^ 1; // sram_page <= {1'b1, ~mmc1_load_register[4]};
+						}
 						SET_BITS(prg_bank_a, "5", mmc1_load_register, "5"); // prg_bank_a[5] = mmc1_load_register[5]; // for SUROM, 512k PRG support
 						SET_BITS(prg_bank_c, "5", mmc1_load_register, "5"); // prg_bank_c[5] = mmc1_load_register[5]; // for SUROM, 512k PRG support
 						break;
@@ -1155,14 +1160,6 @@ static DECLFW(COOLGIRL_WRITE) {
 						break;
 					}
 					mmc1_load_register = 0b100000; // mmc1_load_register[5:0] = 6'b100000;
-					if (flags & 1) // (flags[0]) - 16KB of SRAM
-					{
-						if (chr_mode & (1 << 2)) // if (chr_mode[2])
-							sram_page = 2 | (chr_bank_a >> 6) ^ 1; // sram_page = {1'b1, ~chr_bank_a[6] }, page #2 is battery backed
-						else
-							sram_page = 2 | (chr_bank_a >> 5) ^ 1; // sram_page = {1'b1, ~chr_bank_a[5]}
-					}
-					// 32KB of WRAM is not supported yet (who cares)
 				}
 			}
 		}
