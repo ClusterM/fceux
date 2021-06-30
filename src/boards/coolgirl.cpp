@@ -1533,9 +1533,6 @@ static DECLFW(COOLGIRL_WRITE) {
 		}
 
 		// Mapper #69 - Sunsoft FME-7
-		/*
-		r0 - command register
-		*/
 		if (mapper == 0b011001)
 		{
 			// if (cpu_addr_in[14:13] == 2'b00) mapper69_internal[3:0] = cpu_data_in[3:0];
@@ -1767,6 +1764,18 @@ static DECLFW(COOLGIRL_WRITE) {
 				// Interrupt Acknowledge ($8000)
 				X6502_IRQEnd(FCEU_IQEXT); // mapper67_irq_out <= 0;
 			}
+		}
+
+		// Mapper #89 - Sunsoft-2 chip on the Sunsoft-3 board
+		if (mapper == 0b100101)
+		{
+			// prg_bank_a[3:1] <= cpu_data_in[6:4];
+			SET_BITS(prg_bank_a, "3:1", V, "6:4");
+			// chr_bank_a[6:3] <= {cpu_data_in[7], cpu_data_in[2:0]};
+			SET_BITS(chr_bank_a, "6:3", V, "7,2:0");
+			// mirroring[1:0] <= {1'b1, cpu_data_in[3]};
+			SET_BITS(mirroring, "1", 1, "0");
+			SET_BITS(mirroring, "0", V, "3");
 		}
 	}
 
