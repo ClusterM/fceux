@@ -691,7 +691,7 @@ static DECLFW(COOLGIRL_WRITE) {
 			}
 		}
 
-		// Mappers NINA-03/06 and Sachen 3015: #113 (flag0 = 0), #79 and #146 (flag0 = 1)
+		// Mappers #79 and #146 - NINA-03/06 and Sachen 3015: (flag0 = 1)
 		if (mapper == 0b011011)
 		{
 			// if ({cpu_addr_in[14:13], cpu_addr_in[8]} == 3'b101)
@@ -699,11 +699,8 @@ static DECLFW(COOLGIRL_WRITE) {
 			{
 				//chr_bank_a[5:3] = cpu_data_in[2:0];
 				SET_BITS(chr_bank_a, "5:3", V, "2:0");
-				//prg_bank_a[4:2] = cpu_data_in[5:3];
-				SET_BITS(prg_bank_a, "4:2", V, "5:3");
-				//mirroring = { 1'b0, ~cpu_data_in[7]};
-				if (!(flags & 1)) // if (!flags[0])
-					mirroring = get_bits(V, "7") ^ 1;
+				//prg_bank_a[2] = cpu_data_in[3];
+				SET_BITS(prg_bank_a, "2", V, "3");
 			}
 		}
 
