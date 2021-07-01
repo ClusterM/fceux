@@ -39,6 +39,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QGuiApplication>
+#include <QSettings>
 
 #include "../../types.h"
 #include "../../fceu.h"
@@ -97,6 +98,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	QTreeWidgetItem * item;
 	int opt, useNativeMenuBar;
 	fceuDecIntValidtor *validator;
+	QSettings settings;
 
 	font.setFamily("Courier New");
 	font.setStyle( QFont::StyleNormal );
@@ -687,13 +689,15 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 			loadGameDebugBreakpoints();
 		}
 	}
+
+	restoreGeometry(settings.value("debugger/geometry").toByteArray());
 }
 //----------------------------------------------------------------------------
 ConsoleDebugger::~ConsoleDebugger(void)
 {
 	std::list <ConsoleDebugger*>::iterator it;
 
-	printf("Destroy Debugger Window\n");
+	//printf("Destroy Debugger Window\n");
 	periodicTimer->stop();
 
 	for (it = dbgWinList.begin(); it != dbgWinList.end(); it++)
@@ -701,7 +705,7 @@ ConsoleDebugger::~ConsoleDebugger(void)
 		if ( (*it) == this )
 		{
 			dbgWinList.erase(it);
-			printf("Removing Debugger Window\n");
+			//printf("Removing Debugger Window\n");
 			break;
 		}
 	}
@@ -715,16 +719,20 @@ ConsoleDebugger::~ConsoleDebugger(void)
 //----------------------------------------------------------------------------
 void ConsoleDebugger::closeEvent(QCloseEvent *event)
 {
-   printf("Debugger Close Window Event\n");
-   done(0);
+	QSettings settings;
+	//printf("Debugger Close Window Event\n");
+	settings.setValue("debugger/geometry", saveGeometry());
+	done(0);
 	deleteLater();
-   event->accept();
+	event->accept();
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::closeWindow(void)
 {
-   //printf("Close Window\n");
-   done(0);
+	QSettings settings;
+	//printf("Close Window\n");
+	settings.setValue("debugger/geometry", saveGeometry());
+	done(0);
 	deleteLater();
 }
 //----------------------------------------------------------------------------
@@ -2053,6 +2061,36 @@ void  QAsmView::updateAssemblyView(void)
 
 		a = new dbg_asm_entry_t;
 
+		if (cdloggerdataSize)
+		{
+			uint8_t cdl_data;
+			instruction_addr = GetNesFileAddress(addr) - 16;
+			if ( (instruction_addr >= 0) && (instruction_addr < cdloggerdataSize) )
+			{
+				cdl_data = cdloggerdata[instruction_addr] & 3;
+				if (cdl_data == 3)
+				{
+					line.append("cd ");	// both Code and Data
+				}
+				else if (cdl_data == 2)
+				{
+					line.append(" d ");	// Data
+				}
+				else if (cdl_data == 1)
+				{
+					line.append("c  ");	// Code
+				}
+				else
+				{
+					line.append("   ");	// not logged
+				}
+			}
+			else
+			{
+				line.append("   ");	// cannot be logged
+			}
+		}
+
 		instruction_addr = addr;
 
 		if ( !pc_found )
@@ -2060,23 +2098,23 @@ void  QAsmView::updateAssemblyView(void)
 			if (addr > X.PC)
 			{
 				asmPC = a;
-				line.assign(">");
+				line.append(">");
 				pc_found = 1;
 			}
 			else if (addr == X.PC)
 			{
 				asmPC = a;
-				line.assign(">");
+				line.append(">");
 				pc_found = 1;
 			} 
 			else
 			{
-				line.assign(" ");
+				line.append(" ");
 			}
 		}
 		else 
 		{
-			line.assign(" ");
+			line.append(" ");
 		}
 		a->addr = addr;
 
@@ -3863,6 +3901,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 	QColor hlgtFG("white"), hlgtBG("blue");
 	bool forceDarkColor = false;
 	bool txtHlgtSet = false;
+	QPen pen;
 
 	painter.setFont(font);
 	viewWidth  = event->rect().width();
@@ -4007,6 +4046,12 @@ void QAsmView::paintEvent(QPaintEvent *event)
 			y += pxLineSpacing;
 		}
 	}
+	l = (int)(2.5*pxCharWidth);
+	pen = painter.pen();
+	pen.setWidth(3);
+	pen.setColor( this->palette().color(QPalette::WindowText));
+	painter.setPen( pen );
+	painter.drawLine( l, 0, l, viewHeight );
 }
 //----------------------------------------------------------------------------
 // Bookmark Manager Methods
