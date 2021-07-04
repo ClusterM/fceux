@@ -24,6 +24,7 @@
 #include <QPlainTextEdit>
 #include <QClipboard>
 #include <QScrollBar>
+#include <QToolBar>
 
 #include "Qt/main.h"
 #include "Qt/SymbolicDebug.h"
@@ -118,7 +119,7 @@ class QAsmView : public QWidget
 	protected:
 		void paintEvent(QPaintEvent *event);
 		void keyPressEvent(QKeyEvent *event);
-   	void keyReleaseEvent(QKeyEvent *event);
+		void keyReleaseEvent(QKeyEvent *event);
 		void mousePressEvent(QMouseEvent * event);
 		void mouseReleaseEvent(QMouseEvent * event);
 		void mouseMoveEvent(QMouseEvent * event);
@@ -234,21 +235,24 @@ class ConsoleDebugger : public QDialog
 	protected:
 		void closeEvent(QCloseEvent *event);
 		//void keyPressEvent(QKeyEvent *event);
-   	//void keyReleaseEvent(QKeyEvent *event);
+		//void keyReleaseEvent(QKeyEvent *event);
 
 		//QTreeWidget *tree;
+		QToolBar    *toolBar;
 		QScrollBar  *vbar;
 		QScrollBar  *hbar;
 		QAsmView    *asmView;
 		DebuggerStackDisplay *stackText;
-		QLineEdit *seekEntry;
+		//QLineEdit *seekEntry;
 		QLineEdit *pcEntry;
 		QLineEdit *regAEntry;
 		QLineEdit *regXEntry;
 		QLineEdit *regYEntry;
-		QLineEdit *cpuCycExdVal;
-		QLineEdit *instrExdVal;
+		//QLineEdit *cpuCycExdVal;
+		//QLineEdit *instrExdVal;
 		QLineEdit *selBmAddr;
+		QLineEdit *cpuCyclesVal;
+		QLineEdit *cpuInstrsVal;
 		QGroupBox *stackFrame;
 		QGroupBox *bpFrame;
 		QGroupBox *sfFrame;
@@ -263,17 +267,17 @@ class ConsoleDebugger : public QDialog
 		QCheckBox *I_chkbox;
 		QCheckBox *Z_chkbox;
 		QCheckBox *C_chkbox;
-		QCheckBox *brkCpuCycExd;
-		QCheckBox *brkInstrsExd;
+		//QCheckBox *brkCpuCycExd;
+		//QCheckBox *brkInstrsExd;
 		QLabel    *emuStatLbl;
 		QLabel    *ppuLbl;
 		QLabel    *spriteLbl;
 		QLabel    *scanLineLbl;
 		QLabel    *pixLbl;
 		QLabel    *cpuCyclesLbl1;
-		QLabel    *cpuCyclesLbl2;
+		//QLabel    *cpuCyclesLbl2;
 		QLabel    *cpuInstrsLbl1;
-		QLabel    *cpuInstrsLbl2;
+		//QLabel    *cpuInstrsLbl2;
 		QTimer    *periodicTimer;
 		QFont      font;
 
@@ -286,7 +290,7 @@ class ConsoleDebugger : public QDialog
 		void bmListUpdate( bool reset = false );
 
    public slots:
-      void closeWindow(void);
+		void closeWindow(void);
 		void asmViewCtxMenuAddBP(void);
 		void asmViewCtxMenuAddBM(void);
 		void asmViewCtxMenuAddSym(void);
@@ -304,7 +308,8 @@ class ConsoleDebugger : public QDialog
 		void debugRunLineCB(void);
 		void debugRunLine128CB(void);
 		void openGotoAddrDialog(void);
-		void seekToCB(void);
+		void openChangePcDialog(void);
+		//void seekToCB(void);
 		void seekPCCB(void);
 		void add_BP_CB(void);
 		void edit_BP_CB(void);
