@@ -42,6 +42,7 @@
 #include <QActionGroup>
 #include <QGuiApplication>
 #include <QSettings>
+#include <QToolTip>
 
 #include "../../types.h"
 #include "../../fceu.h"
@@ -551,11 +552,13 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	mainLayouth->addLayout( vbox4, 5 );
 	mainLayouth->addLayout( vbox1, 4 );
 
-	grid    = new QGridLayout();
+	cpuFrame = new QGroupBox( tr("CPU Status") );
+	grid     = new QGridLayout();
 
-	vbox1->addLayout( hbox1 );
+	vbox1->addWidget( cpuFrame );
 	hbox1->addLayout( vbox2, 1 );
 	vbox2->addLayout( grid  );
+	cpuFrame->setLayout( hbox1 );
 
 	//button = new QPushButton( tr("Run") );
 	//grid->addWidget( button, 0, 0, Qt::AlignLeft );
@@ -596,6 +599,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 
 	hbox = new QHBoxLayout();
 	lbl  = new QLabel( tr("PC:") );
+	lbl->setToolTip( tr("Program Counter Register") );
 	pcEntry = new QLineEdit();
 	pcEntry->setFont( font );
 	pcEntry->setMaxLength( 4 );
@@ -603,6 +607,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	pcEntry->setAlignment(Qt::AlignCenter);
 	pcEntry->setMinimumWidth( 6 * fontCharWidth );
 	pcEntry->setMaximumWidth( 6 * fontCharWidth );
+	pcEntry->setToolTip( tr("Program Counter Register Hex Value") );
 	hbox->addWidget( lbl );
 	hbox->addWidget( pcEntry, 1, Qt::AlignLeft );
 	grid->addLayout( hbox, 0, 0, Qt::AlignLeft );
@@ -613,6 +618,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 
 	hbox = new QHBoxLayout();
 	lbl  = new QLabel( tr("A:") );
+	lbl->setToolTip( tr("Accumulator Register") );
 	regAEntry = new QLineEdit();
 	regAEntry->setFont( font );
 	regAEntry->setMaxLength( 2 );
@@ -620,12 +626,14 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	regAEntry->setAlignment(Qt::AlignCenter);
 	regAEntry->setMinimumWidth( 4 * fontCharWidth );
 	regAEntry->setMaximumWidth( 4 * fontCharWidth );
+	regAEntry->setToolTip( tr("Accumulator Register Hex Value") );
 	hbox->addWidget( lbl );
 	hbox->addWidget( regAEntry, 1, Qt::AlignLeft );
 	grid->addLayout( hbox, 0, 1 );
 
 	hbox = new QHBoxLayout();
 	lbl  = new QLabel( tr("X:") );
+	lbl->setToolTip( tr("X Index Register") );
 	regXEntry = new QLineEdit();
 	regXEntry->setFont( font );
 	regXEntry->setMaxLength( 2 );
@@ -633,12 +641,14 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	regXEntry->setAlignment(Qt::AlignCenter);
 	regXEntry->setMinimumWidth( 4 * fontCharWidth );
 	regXEntry->setMaximumWidth( 4 * fontCharWidth );
+	regXEntry->setToolTip( tr("X Index Register Hex Value") );
 	hbox->addWidget( lbl );
 	hbox->addWidget( regXEntry, 1, Qt::AlignLeft );
 	grid->addLayout( hbox, 0, 2 );
 
 	hbox = new QHBoxLayout();
 	lbl  = new QLabel( tr("Y:") );
+	lbl->setToolTip( tr("Y Index Register") );
 	regYEntry = new QLineEdit();
 	regYEntry->setFont( font );
 	regYEntry->setMaxLength( 2 );
@@ -646,9 +656,25 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	regYEntry->setAlignment(Qt::AlignCenter);
 	regYEntry->setMinimumWidth( 4 * fontCharWidth );
 	regYEntry->setMaximumWidth( 4 * fontCharWidth );
+	regYEntry->setToolTip( tr("Y Index Register Hex Value") );
 	hbox->addWidget( lbl );
 	hbox->addWidget( regYEntry, 1, Qt::AlignLeft );
 	grid->addLayout( hbox, 0, 3 );
+
+	QHBoxLayout *regPHbox = new QHBoxLayout();
+	lbl  = new QLabel( tr("P:") );
+	lbl->setToolTip( tr("Status Register") );
+	regPEntry = new QLineEdit();
+	regPEntry->setFont( font );
+	regPEntry->setMaxLength( 2 );
+	regPEntry->setInputMask( ">HH;0" );
+	regPEntry->setAlignment(Qt::AlignCenter);
+	regPEntry->setMinimumWidth( 4 * fontCharWidth );
+	regPEntry->setMaximumWidth( 4 * fontCharWidth );
+	regPEntry->setToolTip( tr("Status Register Hex Value") );
+	regPHbox->addWidget( lbl );
+	regPHbox->addWidget( regPEntry, 1, Qt::AlignLeft );
+	//grid->addLayout( regPHbox, 0, 4 );
 
 	cpuCyclesLbl1 = new QLabel( tr("CPU Cycles:") );
 	//cpuCyclesLbl2 = new QLabel( tr("(+0):") );
@@ -754,14 +780,24 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	Z_chkbox = new QCheckBox( tr("Z") );
 	C_chkbox = new QCheckBox( tr("C") );
 
-	grid->addWidget( N_chkbox, 0, 0, Qt::AlignCenter );
-	grid->addWidget( V_chkbox, 0, 1, Qt::AlignCenter );
-	grid->addWidget( U_chkbox, 0, 2, Qt::AlignCenter );
-	grid->addWidget( B_chkbox, 0, 3, Qt::AlignCenter );
-	grid->addWidget( D_chkbox, 1, 0, Qt::AlignCenter );
-	grid->addWidget( I_chkbox, 1, 1, Qt::AlignCenter );
-	grid->addWidget( Z_chkbox, 1, 2, Qt::AlignCenter );
-	grid->addWidget( C_chkbox, 1, 3, Qt::AlignCenter );
+	N_chkbox->setToolTip( tr("Negative" ) );
+	V_chkbox->setToolTip( tr("Overflow" ) );
+	U_chkbox->setToolTip( tr("Unused"   ) );
+	B_chkbox->setToolTip( tr("Break"    ) );
+	D_chkbox->setToolTip( tr("Decimal"  ) );
+	I_chkbox->setToolTip( tr("Interrupt") );
+	Z_chkbox->setToolTip( tr("Zero"     ) );
+	C_chkbox->setToolTip( tr("Carry"    ) );
+
+	grid->addLayout( regPHbox, 0, 0, 2, 1);
+	grid->addWidget( N_chkbox, 0, 1, Qt::AlignLeft );
+	grid->addWidget( V_chkbox, 0, 2, Qt::AlignLeft );
+	grid->addWidget( U_chkbox, 0, 3, Qt::AlignLeft );
+	grid->addWidget( B_chkbox, 0, 4, Qt::AlignLeft );
+	grid->addWidget( D_chkbox, 1, 1, Qt::AlignLeft );
+	grid->addWidget( I_chkbox, 1, 2, Qt::AlignLeft );
+	grid->addWidget( Z_chkbox, 1, 3, Qt::AlignLeft );
+	grid->addWidget( C_chkbox, 1, 4, Qt::AlignLeft );
 
 	vbox1->addWidget( bpFrame);
 	vbox2->addWidget( sfFrame);
@@ -2513,7 +2549,8 @@ void  QAsmView::updateAssemblyView(void)
 		}
 		line.append(chr);
 
-		size = opsize[GetMem(addr)];
+		a->size = size = opsize[GetMem(addr)];
+
 		if (size == 0)
 		{
 			sprintf(chr, "%02X        UNDEFINED", GetMem(addr++));
@@ -2550,7 +2587,6 @@ void  QAsmView::updateAssemblyView(void)
 		{
 			a->opcode[j] = opcode[j];
 		}
-		a->size = size;
 
 		// special case: an RTS opcode
 		if (GetMem(instruction_addr) == 0x60)
@@ -2763,6 +2799,10 @@ void  ConsoleDebugger::updateRegisterView(void)
 	sprintf( stmp, "%02X", X.Y );
 
 	regYEntry->setText( tr(stmp) );
+
+	sprintf( stmp, "%02X", X.P );
+
+	regPEntry->setText( tr(stmp) );
 
 	N_chkbox->setChecked( (X.P & N_FLAG) ? true : false );
 	V_chkbox->setChecked( (X.P & V_FLAG) ? true : false );
@@ -3294,7 +3334,7 @@ void loadGameDebugBreakpoints(void)
 
 			while ( stmp[i] != 0 )
 			{
-            i = getKeyValuePair( i, stmp, id, data );
+				i = getKeyValuePair( i, stmp, id, data );
 
 				//printf("ID:'%s'  DATA:'%s' \n", id, data );
 
@@ -3353,7 +3393,7 @@ void loadGameDebugBreakpoints(void)
 				}
 			}
 		}
-      else if ( strcmp( id, "Bookmark" ) == 0 )
+		else if ( strcmp( id, "Bookmark" ) == 0 )
 		{
 			int addr = -1;
 			char desc[256];
@@ -3362,7 +3402,7 @@ void loadGameDebugBreakpoints(void)
 
 			while ( stmp[i] != 0 )
 			{
-            i = getKeyValuePair( i, stmp, id, data );
+				i = getKeyValuePair( i, stmp, id, data );
 
 				//printf("ID:'%s'  DATA:'%s' \n", id, data );
 
@@ -3374,16 +3414,16 @@ void loadGameDebugBreakpoints(void)
 				{
 					strcpy( desc, data );
 				}
-         }
+			}
 
-         if ( addr >= 0 )
-         {
-            if ( dbgBmMgr.addBookmark( addr, desc ) )
-            {
-               printf("Error:Failed to add debug bookmark: $%04X  '%s' \n", addr, desc );
-            }
-         }
-      }
+			if ( addr >= 0 )
+			{
+				if ( dbgBmMgr.addBookmark( addr, desc ) )
+				{
+					printf("Error:Failed to add debug bookmark: $%04X  '%s' \n", addr, desc );
+				}
+			}
+		}
 	}
 	fclose(fp);
 
@@ -3613,24 +3653,57 @@ void QAsmView::setRegisterNameEnable( bool value )
 //----------------------------------------------------------------------------
 void QAsmView::calcFontData(void)
 {
-	 this->setFont(font);
-    QFontMetrics metrics(font);
+	this->setFont(font);
+	QFontMetrics metrics(font);
 #if QT_VERSION > QT_VERSION_CHECK(5, 11, 0)
-    pxCharWidth = metrics.horizontalAdvance(QLatin1Char('2'));
+	pxCharWidth = metrics.horizontalAdvance(QLatin1Char('2'));
 #else
-    pxCharWidth = metrics.width(QLatin1Char('2'));
+	pxCharWidth = metrics.width(QLatin1Char('2'));
 #endif
-    pxCharHeight   = metrics.height();
-	 pxLineSpacing  = metrics.lineSpacing() * 1.25;
-    pxLineLead     = pxLineSpacing - pxCharHeight;
-    pxCursorHeight = pxCharHeight;
+	pxCharHeight   = metrics.height();
+	pxLineSpacing  = metrics.lineSpacing() * 1.25;
+	pxLineLead     = pxLineSpacing - pxCharHeight;
+	pxCursorHeight = pxCharHeight;
 
-	 viewLines   = (viewHeight / pxLineSpacing) + 1;
+	viewLines   = (viewHeight / pxLineSpacing) + 1;
 }
 //----------------------------------------------------------------------------
 void QAsmView::setScrollBars( QScrollBar *h, QScrollBar *v )
 {
 	hbar = h; vbar = v;
+}
+//----------------------------------------------------------------------------
+bool QAsmView::event(QEvent *event)
+{
+	if (event->type() == QEvent::ToolTip)
+	{
+		int line;
+		QHelpEvent *helpEvent = static_cast<QHelpEvent *>(event);
+		bool showOpcodeDesc = false;
+
+		QPoint c = convPixToCursor(helpEvent->pos());
+
+		line = lineOffset + c.y();
+
+		showOpcodeDesc = (c.x() >= 22) && (c.x() < 25) && 
+			(line < asmEntry.size()) && (asmEntry[line]->size > 0) &&
+				(asmEntry[line]->type == dbg_asm_entry_t::ASM_TEXT);
+
+		if ( showOpcodeDesc )
+		{
+			QString qs = fceuGetOpcodeToolTip(asmEntry[line]->opcode, asmEntry[line]->size );
+
+			//QToolTip::setFont(font);
+			QToolTip::showText(helpEvent->globalPos(), qs, this );
+		}
+		else
+		{
+			QToolTip::hideText();
+			event->ignore();
+		}
+		return true;
+	}
+	return QWidget::event(event);
 }
 //----------------------------------------------------------------------------
 void QAsmView::resizeEvent(QResizeEvent *event)
@@ -3681,52 +3754,52 @@ void QAsmView::keyPressEvent(QKeyEvent *event)
 		event->accept();
 	}
 	else if (event->matches(QKeySequence::MoveToNextPage))
-   {
-      lineOffset += ( (3 * viewLines) / 4);
-
-      if ( lineOffset >= maxLineOffset )
-      {
-         lineOffset = maxLineOffset;
-      }
-      vbar->setValue( lineOffset );
+	{
+		lineOffset += ( (3 * viewLines) / 4);
+	
+		if ( lineOffset >= maxLineOffset )
+		{
+			lineOffset = maxLineOffset;
+		}
+		vbar->setValue( lineOffset );
 		event->accept();
-   }
-   else if (event->matches(QKeySequence::MoveToPreviousPage))
-   {
-      lineOffset -= ( (3 * viewLines) / 4);
-
-      if ( lineOffset < 0 )
-      {
-         lineOffset = 0;
-      }
-      vbar->setValue( lineOffset );
+	}
+	else if (event->matches(QKeySequence::MoveToPreviousPage))
+	{
+		lineOffset -= ( (3 * viewLines) / 4);
+		
+		if ( lineOffset < 0 )
+		{
+			lineOffset = 0;
+		}
+		vbar->setValue( lineOffset );
 		event->accept();
-   }
+	}
 	else if ( selAddrValue >= 0 )
 	{
 		ctxMenuAddr = selAddrValue;
 
 		if ( event->key() == Qt::Key_B )
-   	{
+		{
 			parent->asmViewCtxMenuAddBP();
 			event->accept();
-   	}
+		}
 		else if ( event->key() == Qt::Key_S )
-   	{
+		{
 			parent->asmViewCtxMenuAddSym();
 			event->accept();
-   	}
+		}
 		else if ( event->key() == Qt::Key_M )
-   	{
+		{
 			parent->asmViewCtxMenuAddBM();
 			event->accept();
-   	}
+		}
 		else if ( event->key() == Qt::Key_H )
-   	{
+		{
 			parent->asmViewCtxMenuOpenHexEdit();
 			event->accept();
-   	}
-   }
+		}
+	}
 }
 //----------------------------------------------------------------------------
 void QAsmView::keyReleaseEvent(QKeyEvent *event)
@@ -3744,7 +3817,7 @@ QPoint QAsmView::convPixToCursor( QPoint p )
 	}
 	else
 	{
-		float x = (float)p.x() / pxCharWidth;
+		float x = (float)(p.x() + pxLineXScroll) / pxCharWidth;
 
 		c.setX( (int)x );
 	}
@@ -4376,7 +4449,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 			x = -pxLineXScroll;
 			l = lineOffset + row;
 
-		   if ( (l >= txtHlgtStartLine) && (l <= txtHlgtEndLine) )
+			if ( (l >= txtHlgtStartLine) && (l <= txtHlgtEndLine) )
 			{
 				int ax, hlgtXs, hlgtXe, hlgtXd;
 				std::string s;
@@ -4587,7 +4660,7 @@ void DebuggerStackDisplay::contextMenuEvent(QContextMenuEvent *event)
 {
 	QAction *act;
 	QMenu menu(this);
-   QMenu *subMenu;
+	QMenu *subMenu;
 	QActionGroup *group;
 	QAction *bytesPerLineAct[4];
 
@@ -4596,7 +4669,7 @@ void DebuggerStackDisplay::contextMenuEvent(QContextMenuEvent *event)
 	act->setChecked(showAddrs);
 	connect( act, SIGNAL(triggered(void)), this, SLOT(toggleShowAddr(void)) );
 
-   menu.addAction( act );
+	menu.addAction( act );
 
 	subMenu = menu.addMenu(tr("Display Bytes Per Line"));
 	group   = new QActionGroup(&menu);
@@ -4667,14 +4740,14 @@ void DebuggerStackDisplay::updateText(void)
 
 	if ( stackPtr <= 0x01FF )
 	{
-      if ( showAddrs || (stackBytesPerLine <= 1) )
-      {
-		   sprintf( stmp, "%03X: %02X", stackPtr, GetMem(stackPtr) );
-      }
-      else
-      {
-		   sprintf( stmp, " %02X", GetMem(stackPtr) );
-      }
+		if ( showAddrs || (stackBytesPerLine <= 1) )
+		{
+			sprintf( stmp, "%03X: %02X", stackPtr, GetMem(stackPtr) );
+		}
+		else
+		{
+			sprintf( stmp, " %02X", GetMem(stackPtr) );
+		}
 
 		stackLine.assign( stmp );
 
@@ -4685,31 +4758,31 @@ void DebuggerStackDisplay::updateText(void)
 			if (stackPtr > 0x1FF)
 				break;
 
-         if ( stackBytesPerLine > 1 )
-         {
-			   if ((i % stackBytesPerLine) == 0)
-            {
-               if ( showAddrs )
-               {
-			   	   sprintf( stmp, "\n%03X: %02X", stackPtr, GetMem(stackPtr) );
-               }
-               else
-               {
-			   	   sprintf( stmp, "\n %02X", GetMem(stackPtr) );
-               }
-            }
-			   else
-            {
-			   	sprintf( stmp, ",%02X", GetMem(stackPtr) );
-            }
-         }
-         else
-         {
-			   sprintf( stmp, "\n%03X: %02X", stackPtr, GetMem(stackPtr) );
-         }
+			if ( stackBytesPerLine > 1 )
+			{
+				if ((i % stackBytesPerLine) == 0)
+				{
+					if ( showAddrs )
+					{
+						sprintf( stmp, "\n%03X: %02X", stackPtr, GetMem(stackPtr) );
+					}
+					else
+					{
+						sprintf( stmp, "\n %02X", GetMem(stackPtr) );
+					}
+				}
+				else
+				{
+				  	sprintf( stmp, ",%02X", GetMem(stackPtr) );
+				}
+			}
+			else
+			{
+			       	   sprintf( stmp, "\n%03X: %02X", stackPtr, GetMem(stackPtr) );
+			}
 			stackLine.append( stmp );
 
-         //printf("Stack $%X: %s\n", stackPtr, stmp );
+			//printf("Stack $%X: %s\n", stackPtr, stmp );
 		}
 	}
 
