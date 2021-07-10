@@ -35,6 +35,7 @@
 #include <QGridLayout>
 #include <QRadioButton>
 #include <QInputDialog>
+#include <QFontDialog>
 #include <QMessageBox>
 #include <QMenuBar>
 #include <QMenu>
@@ -76,7 +77,7 @@ extern int vblankScanLines;
 extern int vblankPixel;
 
 debuggerBookmarkManager_t dbgBmMgr;
-static std::list <ConsoleDebugger*> dbgWinList;
+static ConsoleDebugger* dbgWin = NULL;
 
 static void DeleteBreak(int sel);
 static bool waitingAtBp = false;
@@ -104,13 +105,28 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	int opt, useNativeMenuBar;
 	//fceuDecIntValidtor *validator;
 	QSettings settings;
+	QFont cpuFont;
+	std::string fontString;
+
+	g_config->getOption("SDL.DebuggerCpuStatusFont", &fontString);
+
+	if ( fontString.size() > 0 )
+	{
+		cpuFont.fromString( QString::fromStdString( fontString ) );
+	}
+	else
+	{
+		cpuFont.setFamily("Courier New");
+		cpuFont.setStyle( QFont::StyleNormal );
+		cpuFont.setStyleHint( QFont::Monospace );
+	}
 
 	font.setFamily("Courier New");
 	font.setStyle( QFont::StyleNormal );
 	font.setStyleHint( QFont::Monospace );
 	QFontMetrics fm(font);
 
-	fontCharWidth = 1.00 * fm.averageCharWidth();
+	fontCharWidth = fm.averageCharWidth();
 
 	setWindowTitle("6502 Debugger");
 
@@ -153,7 +169,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 
 	// View -> Go to PC
 	act = new QAction(tr("Go to &PC"), this);
-	act->setShortcut( QKeySequence(tr("Ctrl+P") ));
+	act->setShortcut( QKeySequence(tr("Ctrl+G") ));
 	act->setStatusTip(tr("Go to &PC"));
 	//act->setIcon( QIcon(":icons/JumpTarget.png") );
 	connect(act, SIGNAL(triggered()), this, SLOT(seekPCCB(void)) );
@@ -162,7 +178,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 
 	// View -> Change PC
 	act = new QAction(tr("&Change PC"), this);
-	act->setShortcut( QKeySequence(tr("Ctrl+Shift+P") ));
+	act->setShortcut( QKeySequence(tr("Ctrl+Shift+G") ));
 	act->setStatusTip(tr("&Change PC"));
 	//act->setIcon( QIcon(":icons/JumpTarget.png") );
 	connect(act, SIGNAL(triggered()), this, SLOT(openChangePcDialog(void)) );
@@ -369,6 +385,37 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	actGroup->addAction(act);
 	subMenu->addAction(act);
 
+	optMenu->addSeparator();
+
+	// Options -> Font Selection
+	subMenu  = optMenu->addMenu(tr("&Font Selection"));
+
+	// Options -> Font Selection -> Assembly View
+	act = new QAction(tr("&Assembly View"), this);
+	//act->setShortcut(QKeySequence( tr("F7") ) );
+	act->setStatusTip(tr("Set Assembly View Font"));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(changeAsmFontCB(void)) );
+
+	subMenu->addAction(act);
+
+	// Options -> Font Selection -> Stack View
+	act = new QAction(tr("&Stack View"), this);
+	//act->setShortcut(QKeySequence( tr("F7") ) );
+	act->setStatusTip(tr("Set Stack View Font"));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(changeStackFontCB(void)) );
+
+	subMenu->addAction(act);
+
+	// Options -> Font Selection -> CPU Data View
+	act = new QAction(tr("&CPU Data View"), this);
+	//act->setShortcut(QKeySequence( tr("F7") ) );
+	act->setStatusTip(tr("Set CPU View Font"));
+	connect( act, SIGNAL(triggered(void)), this, SLOT(changeCpuFontCB(void)) );
+
+	subMenu->addAction(act);
+
+	optMenu->addSeparator();
+
 	// Symbols
 	symMenu = menuBar->addMenu(tr("&Symbols"));
 
@@ -560,43 +607,6 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	vbox2->addLayout( grid  );
 	cpuFrame->setLayout( hbox1 );
 
-	//button = new QPushButton( tr("Run") );
-	//grid->addWidget( button, 0, 0, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(debugRunCB(void)) );
-
-	//button = new QPushButton( tr("Step Into") );
-	//grid->addWidget( button, 0, 1, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(debugStepIntoCB(void)) );
-
-	//button = new QPushButton( tr("Step Out") );
-	//grid->addWidget( button, 1, 0, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(debugStepOutCB(void)) );
-
-	//button = new QPushButton( tr("Step Over") );
-	//grid->addWidget( button, 1, 1, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(debugStepOverCB(void)) );
-
-	//button = new QPushButton( tr("Run Line") );
-	//grid->addWidget( button, 2, 0, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(debugRunLineCB(void)) );
-
-	//button = new QPushButton( tr("128 Lines") );
-	//grid->addWidget( button, 2, 1, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(debugRunLine128CB(void)) );
-
-	//button = new QPushButton( tr("Seek To:") );
-	//grid->addWidget( button, 3, 0, Qt::AlignLeft );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(seekToCB(void)) );
-
-	//seekEntry = new QLineEdit();
-	//seekEntry->setFont( font );
-	//seekEntry->setText("0000");
-	//seekEntry->setMaxLength( 4 );
-	//seekEntry->setInputMask( ">HHHH;0" );
-	//seekEntry->setAlignment(Qt::AlignCenter);
-	//seekEntry->setMaximumWidth( 6 * fontCharWidth );
-	//grid->addWidget( seekEntry, 3, 1, Qt::AlignLeft );
-
 	hbox = new QHBoxLayout();
 	lbl  = new QLabel( tr("PC:") );
 	lbl->setToolTip( tr("Program Counter Register") );
@@ -715,7 +725,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	//vbox2->addWidget( stackFrame );
 	hbox1->addWidget( stackFrame, 10 );
 	stackFrame->setLayout( hbox );
-	stackText->setFont(font);
+	//stackText->setFont(font); // Stack font is now set in constructor
 	stackText->setReadOnly(true);
 	stackText->setWordWrapMode( QTextOption::NoWrap );
 	//stackText->setHorizontalScrollBarPolicy( Qt::ScrollBarAlwaysOff );
@@ -938,7 +948,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 
 	windowUpdateReq   = true;
 
-	dbgWinList.push_back( this );
+	dbgWin = this;
 
 	periodicTimer  = new QTimer( this );
 
@@ -951,7 +961,6 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	periodicTimer->start( 100 ); // 10hz
 
 	// If this is the first debug window to open, load breakpoints fresh
-	if ( dbgWinList.size() == 1 )
 	{ 
 		int autoLoadDebug;
 
@@ -964,6 +973,8 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	}
 
 	restoreGeometry(settings.value("debugger/geometry").toByteArray());
+
+	setCpuStatusFont( cpuFont );
 }
 //----------------------------------------------------------------------------
 ConsoleDebugger::~ConsoleDebugger(void)
@@ -973,20 +984,21 @@ ConsoleDebugger::~ConsoleDebugger(void)
 	//printf("Destroy Debugger Window\n");
 	periodicTimer->stop();
 
-	for (it = dbgWinList.begin(); it != dbgWinList.end(); it++)
+	if ( dbgWin == this )
 	{
-		if ( (*it) == this )
-		{
-			dbgWinList.erase(it);
-			//printf("Removing Debugger Window\n");
-			break;
-		}
+		dbgWin = NULL;
 	}
 
-	if ( dbgWinList.size() == 0 )
+	if ( dbgWin == NULL )
 	{
 		saveGameDebugBreakpoints();
 		debuggerClearAllBreakpoints();
+		debuggerClearAllBookmarks();
+
+		if ( waitingAtBp )
+		{
+			FCEUI_SetEmulationPaused(0);
+		}
 	}
 }
 //----------------------------------------------------------------------------
@@ -1007,6 +1019,39 @@ void ConsoleDebugger::closeWindow(void)
 	settings.setValue("debugger/geometry", saveGeometry());
 	done(0);
 	deleteLater();
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::setCpuStatusFont( const QFont &font )
+{
+	QFontMetrics fm(font);
+	int fontCharWidth;
+
+	fontCharWidth = fm.averageCharWidth();
+
+	pcEntry->setFont( font );
+	pcEntry->setMinimumWidth( 6 * fontCharWidth );
+	pcEntry->setMaximumWidth( 6 * fontCharWidth );
+
+	regAEntry->setFont( font );
+	regAEntry->setMinimumWidth( 4 * fontCharWidth );
+	regAEntry->setMaximumWidth( 4 * fontCharWidth );
+
+	regXEntry->setFont( font );
+	regXEntry->setMinimumWidth( 4 * fontCharWidth );
+	regXEntry->setMaximumWidth( 4 * fontCharWidth );
+
+	regYEntry->setFont( font );
+	regYEntry->setMinimumWidth( 4 * fontCharWidth );
+	regYEntry->setMaximumWidth( 4 * fontCharWidth );
+
+	regPEntry->setFont( font );
+	regPEntry->setMinimumWidth( 4 * fontCharWidth );
+	regPEntry->setMaximumWidth( 4 * fontCharWidth );
+
+	cpuCyclesVal->setFont(font);
+	cpuCyclesVal->setMinimumWidth( 24 * fontCharWidth );
+	cpuInstrsVal->setFont(font);
+	cpuInstrsVal->setMinimumWidth( 24 * fontCharWidth );
 }
 //----------------------------------------------------------------------------
 void 	ConsoleDebugger::bpItemClicked( QTreeWidgetItem *item, int column)
@@ -1062,7 +1107,7 @@ void ConsoleDebugger::selBmAddrChanged(const QString &txt)
 	//printf("selBmAddrVal = %04X\n", selBmAddrVal );
 }
 //----------------------------------------------------------------------------
-void ConsoleDebugger::openBpEditWindow( int editIdx, watchpointinfo *wp )
+void ConsoleDebugger::openBpEditWindow( int editIdx, watchpointinfo *wp, bool forceAccept )
 {
 	int ret;
 	QDialog dialog(this);
@@ -1237,7 +1282,14 @@ void ConsoleDebugger::openBpEditWindow( int editIdx, watchpointinfo *wp )
 
 	dialog.setLayout( mainLayout );
 
-	ret = dialog.exec();
+	if ( forceAccept )
+	{
+		ret = QDialog::Accepted;
+	}
+	else
+	{
+		ret = dialog.exec();
+	}
 
 	if ( ret == QDialog::Accepted )
 	{
@@ -1498,6 +1550,8 @@ void ConsoleDebugger::delete_BM_CB(void)
 	dbgBmMgr.deleteBookmark( addr );
 
 	bmListUpdate(true);
+
+	saveGameDebugBreakpoints(true);
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::edit_BM_name( int addr )
@@ -1584,6 +1638,8 @@ void ConsoleDebugger::bmListUpdate( bool reset )
 void ConsoleDebugger::add_BP_CB(void)
 {
 	openBpEditWindow(-1);
+
+	asmView->determineLineBreakpoints();
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::edit_BP_CB(void)
@@ -1601,6 +1657,8 @@ void ConsoleDebugger::edit_BP_CB(void)
 	int row = bpTree->indexOfTopLevelItem(item);
 
 	openBpEditWindow( row, &watchpoint[row] );
+
+	asmView->determineLineBreakpoints();
 }
 //----------------------------------------------------------------------------
 static void DeleteBreak(int sel)
@@ -1644,6 +1702,11 @@ static void DeleteBreak(int sel)
 	numWPs--;
 
 	fceuWrapperUnLock();
+}
+//----------------------------------------------------------------------------
+void debuggerClearAllBookmarks(void)
+{
+	dbgBmMgr.clear();
 }
 //----------------------------------------------------------------------------
 void debuggerClearAllBreakpoints(void)
@@ -1697,6 +1760,9 @@ void ConsoleDebugger::delete_BP_CB(void)
 	delete item;
 	//delete bpTree->takeTopLevelItem(row);
 	//bpListUpdate( true );
+	
+	saveGameDebugBreakpoints(true);
+	asmView->determineLineBreakpoints();
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::breakOnBadOpcodeCB(bool value)
@@ -1806,6 +1872,55 @@ void ConsoleDebugger::debFileAutoLoadCB( bool value )
 	if ( autoLoadDebug && (numWPs == 0) )
 	{
 		loadGameDebugBreakpoints();
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::changeAsmFontCB(void)
+{
+	bool ok = false;
+
+	QFont selFont = QFontDialog::getFont( &ok, asmView->QWidget::font(), this, tr("Select Font"), QFontDialog::MonospacedFonts );
+
+	if ( ok )
+	{
+		asmView->setFont( selFont );
+		asmView->updateAssemblyView();
+
+		//printf("Font Changed to: '%s'\n", font.toString().toStdString().c_str() );
+
+		g_config->setOption("SDL.DebuggerAsmFont", selFont.toString().toStdString().c_str() );
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::changeStackFontCB(void)
+{
+	bool ok = false;
+
+	QFont selFont = QFontDialog::getFont( &ok, stackText->QWidget::font(), this, tr("Select Font"), QFontDialog::MonospacedFonts );
+
+	if ( ok )
+	{
+		stackText->setFont( selFont );
+
+		//printf("Font Changed to: '%s'\n", font.toString().toStdString().c_str() );
+
+		g_config->setOption("SDL.DebuggerStackFont", selFont.toString().toStdString().c_str() );
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::changeCpuFontCB(void)
+{
+	bool ok = false;
+
+	QFont selFont = QFontDialog::getFont( &ok, pcEntry->QWidget::font(), this, tr("Select Font"), QFontDialog::MonospacedFonts );
+
+	if ( ok )
+	{
+		setCpuStatusFont( selFont );
+
+		//printf("Font Changed to: '%s'\n", font.toString().toStdString().c_str() );
+
+		g_config->setOption("SDL.DebuggerCpuStatusFont", selFont.toString().toStdString().c_str() );
 	}
 }
 //----------------------------------------------------------------------------
@@ -2162,6 +2277,7 @@ void ConsoleDebugger::asmViewCtxMenuRunToCursor(void)
 //----------------------------------------------------------------------------
 void ConsoleDebugger::asmViewCtxMenuAddBP(void)
 {
+	int bpNum;
 	watchpointinfo wp;
 
 	wp.address = asmView->getCtxMenuAddr();
@@ -2170,8 +2286,18 @@ void ConsoleDebugger::asmViewCtxMenuAddBP(void)
 	wp.condText = 0;
 	wp.desc = NULL;
 
-	openBpEditWindow( -1, &wp );
+	bpNum = asmView->isBreakpointAtAddr( wp.address );
 
+	if ( bpNum >= 0 )
+	{
+		openBpEditWindow( bpNum, &watchpoint[bpNum] );
+	}
+	else
+	{
+		openBpEditWindow( -1, &wp );
+	}
+
+	asmView->determineLineBreakpoints();
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::asmViewCtxMenuAddBM(void)
@@ -2233,6 +2359,83 @@ void QAsmView::setPC_placement( int mode, int ofs )
 	g_config->setOption("SDL.DebuggerPCPlacement"  , pcLinePlacement);
 	g_config->setOption("SDL.DebuggerPCLineOffset" , pcLineOffset   );
 	g_config->save();
+}
+//----------------------------------------------------------------------------
+void QAsmView::toggleBreakpoint(int line)
+{
+	if ( line < asmEntry.size() )
+	{
+		int bpNum = isBreakpointAtLine(line);
+
+		if ( bpNum >= 0 )
+		{
+			DeleteBreak( bpNum );
+		}
+		else
+		{
+			watchpointinfo wp;
+
+			wp.address = asmEntry[line]->addr;
+			wp.endaddress = 0;
+			wp.flags   = WP_X | WP_E;
+			wp.condText = 0;
+			wp.desc = NULL;
+
+			dbgWin->openBpEditWindow( -1, &wp, true );
+		}
+		asmEntry[line]->bpNum = isBreakpointAtLine(line);
+	}
+}
+//----------------------------------------------------------------------------
+int QAsmView::isBreakpointAtAddr( int addr )
+{
+	for (int i=0; i<numWPs; i++)
+	{
+		if ( (watchpoint[i].flags & WP_X) == 0 )
+		{
+			continue;
+		}
+		if ( (watchpoint[i].flags & (BT_P|BT_S) ) != 0 )
+		{
+			continue;
+		}
+		if ( watchpoint[i].endaddress )
+		{
+			if ( (addr >= watchpoint[i].address) && 
+				addr < watchpoint[i].endaddress )
+			{
+				return i;
+			}
+		}
+		else
+		{
+			if (addr == watchpoint[i].address)
+			{
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+//----------------------------------------------------------------------------
+int QAsmView::isBreakpointAtLine( int l )
+{
+	if ( l < asmEntry.size() )
+	{
+		if ( asmEntry[l]->type == dbg_asm_entry_t::ASM_TEXT )
+		{
+			return isBreakpointAtAddr( asmEntry[l]->addr );
+		}
+	}
+	return -1;
+}
+//----------------------------------------------------------------------------
+void QAsmView::determineLineBreakpoints(void)
+{
+	for (size_t i=0; i<asmEntry.size(); i++)
+	{
+		asmEntry[i]->bpNum = isBreakpointAtLine(i);
+	}
 }
 //----------------------------------------------------------------------------
 void QAsmView::setBreakpointAtSelectedLine(void)
@@ -2454,14 +2657,13 @@ void  QAsmView::updateAssemblyView(void)
 
 	if ( symbolicDebugEnable )
 	{
-		asmFlags |= ASM_DEBUG_SYMS;
+		asmFlags |= ASM_DEBUG_SYMS | ASM_DEBUG_REPLACE;
 
 		if ( registerNameEnable )
 		{
 			asmFlags |= ASM_DEBUG_REGS;
 		}
 	}
-	//asmText->clear();
 
 	for (int i=0; i < 0xFFFF; i++)
 	{
@@ -2689,6 +2891,8 @@ void  QAsmView::updateAssemblyView(void)
 	//setMaximumWidth( pxLineWidth + 10 );
 
 	vbar->setMaximum( asmEntry.size() );
+
+	determineLineBreakpoints();
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::setRegsFromEntry(void)
@@ -3043,9 +3247,9 @@ void FCEUD_DebugBreakpoint( int bpNum )
 
 	fceuWrapperUnLock();
 
-	for (it=dbgWinList.begin(); it!=dbgWinList.end(); it++)
+	if ( dbgWin )
 	{
-		(*it)->breakPointNotify( bpNum );
+		dbgWin->breakPointNotify( bpNum );
 	}
 
 	while ( nes_shm->runEmulator && bpDebugEnable &&
@@ -3078,7 +3282,17 @@ void FCEUD_DebugBreakpoint( int bpNum )
 //----------------------------------------------------------------------------
 bool debuggerWindowIsOpen(void)
 {
-	return (dbgWinList.size() > 0);
+	return dbgWin != NULL;
+}
+//----------------------------------------------------------------------------
+void debuggerWindowSetFocus(bool val)
+{
+	if ( dbgWin )
+	{
+		dbgWin->activateWindow();
+		dbgWin->raise();
+		dbgWin->setFocus();
+	}
 }
 //----------------------------------------------------------------------------
 bool debuggerWaitingAtBreakpoint(void)
@@ -3090,9 +3304,9 @@ void updateAllDebuggerWindows( void )
 {
 	std::list <ConsoleDebugger*>::iterator it;
 
-	for (it=dbgWinList.begin(); it!=dbgWinList.end(); it++)
+	if ( dbgWin )
 	{
-		(*it)->queueUpdate();
+		dbgWin->queueUpdate();
 	}
 }
 //----------------------------------------------------------------------------
@@ -3143,25 +3357,26 @@ static int getGameDebugBreakpointFileName(char *filepath)
 	return 0;
 }
 //----------------------------------------------------------------------------
-void saveGameDebugBreakpoints(void)
+void saveGameDebugBreakpoints( bool force )
 {
 	int i;
 	FILE *fp;
 	char stmp[512];
 	char flags[8];
-   debuggerBookmark_t *bm;
+	debuggerBookmark_t *bm;
 
 	// If no breakpoints are loaded, skip saving
-	if ( (numWPs == 0) && (dbgBmMgr.size() == 0) )
+	if ( !force && (numWPs == 0) && (dbgBmMgr.size() == 0) )
 	{
 		return;
 	}
 	if ( getGameDebugBreakpointFileName( stmp ) )
 	{
+		printf("Error: Failed to get save file name for debug\n");
 		return;
 	}
 
-	//printf("Debug Save File: '%s' \n", stmp );
+	printf("Debug Save File: '%s' \n", stmp );
 
 	fp = fopen( stmp, "w");
 
@@ -3200,14 +3415,14 @@ void saveGameDebugBreakpoints(void)
 			  		(watchpoint[i].desc != NULL) ? watchpoint[i].desc : "");
 	}
 
-   bm = dbgBmMgr.begin();
+	bm = dbgBmMgr.begin();
 
-   while ( bm != NULL )
-   {
+	while ( bm != NULL )
+	{
 		fprintf( fp, "Bookmark: addr=%04X  desc=\"%s\" \n", bm->addr, bm->name.c_str() );
 
-      bm = dbgBmMgr.next();
-   }
+		bm = dbgBmMgr.next();
+	}
 
 	fclose(fp);
 
@@ -3290,13 +3505,14 @@ void loadGameDebugBreakpoints(void)
 	char id[64], data[128];
 
 	// If no debug windows are open, skip loading breakpoints
-	if ( dbgWinList.size() == 0 )
+	if ( dbgWin == NULL )
 	{
 		printf("No Debug Windows Open: Skipping loading of breakpoint data\n");
 		return;
 	}
 	if ( getGameDebugBreakpointFileName( stmp ) )
 	{
+		printf("Error: Failed to get load file name for debug\n");
 		return;
 	}
 
@@ -3443,12 +3659,22 @@ QAsmView::QAsmView(QWidget *parent)
 	QPalette pal;
 	QColor fg("black"), bg("white");
 	QColor c;
+	std::string fontString;
 
 	useDarkTheme = false;
 
-	font.setFamily("Courier New");
-	font.setStyle( QFont::StyleNormal );
-	font.setStyleHint( QFont::Monospace );
+	g_config->getOption("SDL.DebuggerAsmFont", &fontString);
+
+	if ( fontString.size() > 0 )
+	{
+		font.fromString( QString::fromStdString( fontString ) );
+	}
+	else
+	{
+		font.setFamily("Courier New");
+		font.setStyle( QFont::StyleNormal );
+		font.setStyleHint( QFont::Monospace );
+	}
 
 	pal = this->palette();
 
@@ -3658,9 +3884,18 @@ void QAsmView::setRegisterNameEnable( bool value )
 	}
 }
 //----------------------------------------------------------------------------
+void QAsmView::setFont( const QFont &newFont )
+{
+	font = newFont;
+
+	QWidget::setFont(newFont);
+
+	calcFontData();
+}
+//----------------------------------------------------------------------------
 void QAsmView::calcFontData(void)
 {
-	this->setFont(font);
+	QWidget::setFont(font);
 	QFontMetrics metrics(font);
 #if QT_VERSION > QT_VERSION_CHECK(5, 11, 0)
 	pxCharWidth = metrics.horizontalAdvance(QLatin1Char('2'));
@@ -4103,6 +4338,13 @@ void QAsmView::mousePressEvent(QMouseEvent * event)
 		txtHlgtAnchorLine = line;
 
 		setHighlightEndCoord( c.x(), line );
+
+		if ( (c.x() >= 2) && (c.x() <= 3) )
+		{
+			//printf("Toggle BP!\n");
+			toggleBreakpoint(line);
+		}
+
 	}
 	
 	selAddrLine  = -1;
@@ -4328,7 +4570,14 @@ void QAsmView::contextMenuEvent(QContextMenuEvent *event)
 			connect( act, SIGNAL(triggered(void)), parent, SLOT(asmViewCtxMenuRunToCursor(void)) );
 		}
 
-		act = new QAction(tr("Add &Breakpoint"), &menu);
+		if ( isBreakpointAtAddr( addr ) >= 0 )
+		{
+			act = new QAction(tr("Edit &Breakpoint"), &menu);
+		}
+		else
+		{
+			act = new QAction(tr("Add &Breakpoint"), &menu);
+		}
 		menu.addAction(act);
 		act->setShortcut( QKeySequence(tr("B")));
 		connect( act, SIGNAL(triggered(void)), parent, SLOT(asmViewCtxMenuAddBP(void)) );
@@ -4370,6 +4619,8 @@ void QAsmView::drawText( QPainter *painter, int x, int y, const char *txt )
 void QAsmView::paintEvent(QPaintEvent *event)
 {
 	int x,y,l, row, nrow, selAddr;
+	int cd_boundary, asm_start_boundary;
+	int pxCharWidth2, vOffset;
 	QPainter painter(this);
 	QColor white("white"), black("black"), blue("blue");
 	QColor hlgtFG("white"), hlgtBG("blue");
@@ -4408,7 +4659,14 @@ void QAsmView::paintEvent(QPaintEvent *event)
 	}
 	selAddr = parent->getBookmarkSelectedAddress();
 
+	pxCharWidth2 = (pxCharWidth/2);
+	cd_boundary = (int)(2.5*pxCharWidth) - pxLineXScroll;
+	asm_start_boundary = cd_boundary + (10*pxCharWidth);
+	//asm_stop_boundary  = asm_start_boundary + (9*pxCharWidth);
+
 	painter.fillRect( 0, 0, viewWidth, viewHeight, this->palette().color(QPalette::Window) );
+	painter.fillRect( 0, 0, cd_boundary, viewHeight, this->palette().color(QPalette::Mid) );
+	painter.fillRect( asm_start_boundary, 0, (9*pxCharWidth), viewHeight, this->palette().color(QPalette::AlternateBase) );
 
 	y = pxLineSpacing;
 
@@ -4425,7 +4683,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 		{
 			if ( l == asmPC->line )
 			{
-				painter.fillRect( 0, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("pink") );
+				painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("pink") );
 				forceDarkColor = true;
 			}
 		}
@@ -4434,7 +4692,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 		{
 			if ( asmEntry[l]->type != dbg_asm_entry_t::ASM_TEXT )
 			{
-				painter.fillRect( 0, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("light blue") );
+				painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("light blue") );
 				forceDarkColor = true;
 			}
 
@@ -4520,12 +4778,34 @@ void QAsmView::paintEvent(QPaintEvent *event)
 			y += pxLineSpacing;
 		}
 	}
-	l = (int)(2.5*pxCharWidth) - pxLineXScroll;
 	pen = painter.pen();
 	pen.setWidth(3);
 	pen.setColor( this->palette().color(QPalette::WindowText));
 	painter.setPen( pen );
-	painter.drawLine( l, 0, l, viewHeight );
+	painter.drawLine( cd_boundary, 0, cd_boundary, viewHeight );
+
+	y = pxLineSpacing;
+
+	pen.setWidth(2);
+	painter.setPen( pen );
+	painter.setBrush(Qt::red);
+	vOffset = pxLineLead + (pxLineSpacing - pxLineLead - pxCharWidth)/2;
+
+	for (row=0; row < nrow; row++)
+	{
+		x = -pxLineXScroll;
+		l = lineOffset + row;
+
+		if ( l < asmEntry.size() )
+		{
+			if ( asmEntry[l]->bpNum >= 0 )
+			{
+				painter.drawEllipse( cd_boundary - pxCharWidth2, y - pxLineSpacing + pxLineLead + vOffset, pxCharWidth, pxCharWidth );
+			}
+		}
+
+		y += pxLineSpacing;
+	}
 }
 //----------------------------------------------------------------------------
 // Bookmark Manager Methods
@@ -4664,8 +4944,40 @@ debuggerBookmark_t *debuggerBookmarkManager_t::getAddr( int addr )
 DebuggerStackDisplay::DebuggerStackDisplay(QWidget *parent)
    : QPlainTextEdit(parent)
 {
-   stackBytesPerLine = 4;
-   showAddrs = true;
+	QFont font;
+	std::string fontString;
+
+	g_config->getOption("SDL.DebuggerStackFont", &fontString);
+
+	if ( fontString.size() > 0 )
+	{
+		font.fromString( QString::fromStdString( fontString ) );
+	}
+	else
+	{
+		font.setFamily("Courier New");
+		font.setStyle( QFont::StyleNormal );
+		font.setStyleHint( QFont::Monospace );
+	}
+	setFont( font );
+
+	QFontMetrics fm(font);
+
+	stackBytesPerLine = 4;
+	showAddrs = true;
+
+#if QT_VERSION > QT_VERSION_CHECK(5, 11, 0)
+	pxCharWidth = fm.horizontalAdvance(QLatin1Char('2'));
+#else
+	pxCharWidth = fm.width(QLatin1Char('2'));
+#endif
+	pxLineSpacing = fm.lineSpacing();
+
+	recalcCharsPerLine();
+
+	setMinimumWidth( pxCharWidth * charsPerLine );
+	setMinimumHeight( pxLineSpacing *  5 );
+	setMaximumHeight( pxLineSpacing * 20 );
 }
 //----------------------------------------------------------------------------
 DebuggerStackDisplay::~DebuggerStackDisplay(void)
@@ -4673,20 +4985,46 @@ DebuggerStackDisplay::~DebuggerStackDisplay(void)
 
 }
 //----------------------------------------------------------------------------
+void DebuggerStackDisplay::setFont( const QFont &font )
+{
+	QFontMetrics fm(font);
+
+	QPlainTextEdit::setFont(font);
+
+#if QT_VERSION > QT_VERSION_CHECK(5, 11, 0)
+	pxCharWidth = fm.horizontalAdvance(QLatin1Char('2'));
+#else
+	pxCharWidth = fm.width(QLatin1Char('2'));
+#endif
+	pxLineSpacing = fm.lineSpacing();
+	
+	setMinimumWidth( pxCharWidth * charsPerLine );
+	setMinimumHeight( pxLineSpacing * 5 );
+	setMaximumHeight( pxLineSpacing * 20 );
+}
+//----------------------------------------------------------------------------
+void DebuggerStackDisplay::recalcCharsPerLine(void)
+{
+	charsPerLine = (showAddrs ? 5 : 1) + (stackBytesPerLine*3);
+}
+//----------------------------------------------------------------------------
 void DebuggerStackDisplay::keyPressEvent(QKeyEvent *event)
 {
 	//printf("Debug Stack Window Key Press: 0x%x \n", event->key() );
 
-   if ( (event->key() >= Qt::Key_1) && ( (event->key() < Qt::Key_9) ) )
-   {
-      stackBytesPerLine = event->key() - Qt::Key_0;
-      updateText();
-   }
-   else if ( event->key() == Qt::Key_A )
-   {
-      showAddrs = !showAddrs;
-      updateText();
-   }
+	if ( (event->key() >= Qt::Key_1) && ( (event->key() < Qt::Key_9) ) )
+	{
+		stackBytesPerLine = event->key() - Qt::Key_0;
+		recalcCharsPerLine();
+	
+		updateText();
+	}
+	else if ( event->key() == Qt::Key_A )
+	{
+		showAddrs = !showAddrs;
+		recalcCharsPerLine();
+		updateText();
+	}
 }
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::contextMenuEvent(QContextMenuEvent *event)
@@ -4734,33 +5072,38 @@ void DebuggerStackDisplay::contextMenuEvent(QContextMenuEvent *event)
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::toggleShowAddr(void)
 {
-   showAddrs = !showAddrs;
+	showAddrs = !showAddrs;
+	recalcCharsPerLine();
 
-   updateText();
+	updateText();
 }
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::sel1BytePerLine(void)
 {
-   stackBytesPerLine = 1;
-   updateText();
+	stackBytesPerLine = 1;
+	recalcCharsPerLine();
+	updateText();
 }
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::sel2BytesPerLine(void)
 {
-   stackBytesPerLine = 2;
-   updateText();
+	stackBytesPerLine = 1;
+	recalcCharsPerLine();
+	updateText();
 }
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::sel3BytesPerLine(void)
 {
-   stackBytesPerLine = 3;
-   updateText();
+	stackBytesPerLine = 3;
+	recalcCharsPerLine();
+	updateText();
 }
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::sel4BytesPerLine(void)
 {
-   stackBytesPerLine = 4;
-   updateText();
+	stackBytesPerLine = 4;
+	recalcCharsPerLine();
+	updateText();
 }
 //----------------------------------------------------------------------------
 void DebuggerStackDisplay::updateText(void)
@@ -4779,7 +5122,7 @@ void DebuggerStackDisplay::updateText(void)
 		}
 		else
 		{
-			sprintf( stmp, " %02X", GetMem(stackPtr) );
+			sprintf( stmp, "%02X", GetMem(stackPtr) );
 		}
 
 		stackLine.assign( stmp );
@@ -4801,7 +5144,7 @@ void DebuggerStackDisplay::updateText(void)
 					}
 					else
 					{
-						sprintf( stmp, "\n %02X", GetMem(stackPtr) );
+						sprintf( stmp, "\n%02X", GetMem(stackPtr) );
 					}
 				}
 				else
@@ -4820,5 +5163,8 @@ void DebuggerStackDisplay::updateText(void)
 	}
 
 	setPlainText( tr(stackLine.c_str()) );
+
+	setMinimumWidth( pxCharWidth * charsPerLine );
+	setMinimumHeight( pxLineSpacing * 5 );
 }
 //----------------------------------------------------------------------------

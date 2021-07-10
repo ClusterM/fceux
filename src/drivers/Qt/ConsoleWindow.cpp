@@ -2698,13 +2698,20 @@ void consoleWin_t::openRamSearch(void)
 
 void consoleWin_t::openDebugWindow(void)
 {
-	ConsoleDebugger *debugWin;
-
 	//printf("Open GUI 6502 Debugger Window\n");
 	
-   debugWin = new ConsoleDebugger(this);
+	if ( debuggerWindowIsOpen() )
+	{
+		debuggerWindowSetFocus();
+	}
+	else
+	{
+		ConsoleDebugger *debugWin;
+
+		debugWin = new ConsoleDebugger(this);
 	
-   debugWin->show();
+		debugWin->show();
+	}
 }
 
 void consoleWin_t::openHexEditor(void)
@@ -2741,13 +2748,7 @@ void consoleWin_t::openNTViewer(void)
 
 void consoleWin_t::openCodeDataLogger(void)
 {
-	CodeDataLoggerDialog_t *cdlWin;
-
-	//printf("Open Code Data Logger Window\n");
-	
-   cdlWin = new CodeDataLoggerDialog_t(this);
-	
-   cdlWin->show();
+	openCDLWindow(this);
 }
 
 void consoleWin_t::openGGEncoder(void)
@@ -2756,9 +2757,9 @@ void consoleWin_t::openGGEncoder(void)
 
 	//printf("Open Game Genie Window\n");
 	
-   win = new GameGenieDialog_t(this);
+	win = new GameGenieDialog_t(this);
 	
-   win->show();
+	win->show();
 }
 
 void consoleWin_t::openNesHeaderEditor(void)
@@ -2767,7 +2768,7 @@ void consoleWin_t::openNesHeaderEditor(void)
 
 	//printf("Open iNES Header Editor Window\n");
 	
-   win = new iNesHeaderEditor_t(this);
+	win = new iNesHeaderEditor_t(this);
 	
 	if ( win->isInitialized() )
 	{

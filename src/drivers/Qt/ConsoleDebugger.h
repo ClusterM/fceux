@@ -40,6 +40,7 @@ struct dbg_asm_entry_t
 	uint8  opcode[3];
 	std::string  text;
 	debugSymbol_t  sym;
+	int  bpNum;
 
 	enum
 	{
@@ -52,6 +53,7 @@ struct dbg_asm_entry_t
 	{
 		addr = 0; bank = -1; rom = -1; 
 		size = 0; line =  0; type = ASM_TEXT;
+		bpNum = -1;
 
 		for (int i=0; i<3; i++)
 		{
@@ -116,6 +118,10 @@ class QAsmView : public QWidget
 		int  getCursorAddr(void){ return cursorLineAddr; };
 		void setPC_placement( int mode, int ofs = 0 );
 		void setBreakpointAtSelectedLine(void);
+		int  isBreakpointAtLine( int line );
+		int  isBreakpointAtAddr( int addr );
+		void determineLineBreakpoints(void);
+		void setFont( const QFont &font );
 	protected:
 		bool event(QEvent *event) override;
 		void paintEvent(QPaintEvent *event);
@@ -128,6 +134,7 @@ class QAsmView : public QWidget
 		void wheelEvent(QWheelEvent *event);
 		void contextMenuEvent(QContextMenuEvent *event);
 		void loadHighlightToClipboard(void);
+		void toggleBreakpoint(int line);
 
 		void calcFontData(void);
 		QPoint convPixToCursor( QPoint p );
@@ -198,15 +205,20 @@ class DebuggerStackDisplay : public QPlainTextEdit
 	~DebuggerStackDisplay(void);
 
       void updateText(void);
+      void setFont( const QFont &font );
 
    protected:
       void keyPressEvent(QKeyEvent *event);
       void contextMenuEvent(QContextMenuEvent *event);
+      void recalcCharsPerLine(void);
 
+      int  pxCharWidth;
+      int  pxLineSpacing;
+      int  charsPerLine;
       int  stackBytesPerLine;
       bool showAddrs;
 
-	private slots:
+	public slots:
       void toggleShowAddr(void);
       void sel1BytePerLine(void);
       void sel2BytesPerLine(void);
@@ -225,7 +237,7 @@ class ConsoleDebugger : public QDialog
 		void updateWindowData(void);
 		void updateRegisterView(void);
 		void breakPointNotify(int bpNum);
-		void openBpEditWindow(int editIdx = -1, watchpointinfo *wp = NULL );
+		void openBpEditWindow(int editIdx = -1, watchpointinfo *wp = NULL, bool forceAccept = false );
 		void openDebugSymbolEditWindow( int addr );
 		void setBookmarkSelectedAddress( int addr );
 		int  getBookmarkSelectedAddress(void){ return selBmAddrVal; };
@@ -233,6 +245,8 @@ class ConsoleDebugger : public QDialog
 		void queueUpdate(void);
 
 		QLabel    *asmLineSelLbl;
+
+		void setCpuStatusFont( const QFont &font );
 	protected:
 		void closeEvent(QCloseEvent *event);
 		//void keyPressEvent(QKeyEvent *event);
@@ -344,15 +358,20 @@ class ConsoleDebugger : public QDialog
 		void pcSetPlaceLowerMid(void);
 		void pcSetPlaceBottom(void);
 		void pcSetPlaceCustom(void);
+		void changeAsmFontCB(void);
+		void changeStackFontCB(void);
+		void changeCpuFontCB(void);
 
 };
 
 bool debuggerWindowIsOpen(void);
+void debuggerWindowSetFocus(bool val = true);
 bool debuggerWaitingAtBreakpoint(void);
 void bpDebugSetEnable(bool val);
-void saveGameDebugBreakpoints(void);
+void saveGameDebugBreakpoints( bool force = false );
 void loadGameDebugBreakpoints(void);
 void debuggerClearAllBreakpoints(void);
+void debuggerClearAllBookmarks(void);
 void updateAllDebuggerWindows(void);
 
 extern debuggerBookmarkManager_t dbgBmMgr;
