@@ -71,6 +71,7 @@
 #include "Qt/HexEditor.h"
 #include "Qt/ConsoleDebugger.h"
 #include "Qt/ConsoleUtilities.h"
+#include "Qt/ColorMenu.h"
 
 // Where are these defined?
 extern int vblankScanLines;
@@ -414,6 +415,41 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 
 	subMenu->addAction(act);
 
+	// Options -> Color Selection
+	subMenu  = optMenu->addMenu(tr("&Color Selection"));
+
+	// Options -> Color Selection -> Opcodes
+	opcodeColorAct = new ColorMenuItem( tr("&Opcodes"), "SDL.AsmSyntaxColorOpcode", this);
+
+	subMenu->addAction(opcodeColorAct);
+
+	// Options -> Color Selection -> Address Values
+	addressColorAct = new ColorMenuItem( tr("&Address Values"), "SDL.AsmSyntaxColorAddress", this);
+
+	subMenu->addAction(addressColorAct);
+
+	// Options -> Color Selection -> Immediate Values
+	immediateColorAct = new ColorMenuItem( tr("&Immediate Values"), "SDL.AsmSyntaxColorImmediate", this);
+
+	subMenu->addAction(immediateColorAct);
+
+	// Options -> Color Selection -> Labels
+	labelColorAct = new ColorMenuItem( tr("&Labels"), "SDL.AsmSyntaxColorLabel", this);
+
+	subMenu->addAction(labelColorAct);
+
+	// Options -> Color Selection -> Comments
+	commentColorAct = new ColorMenuItem( tr("&Comments"), "SDL.AsmSyntaxColorComment", this);
+
+	subMenu->addAction(commentColorAct);
+
+	subMenu->addSeparator();
+
+	// Options -> Color Selection -> (PC) Active Statement
+	pcColorAct = new ColorMenuItem( tr("(&PC) Active Statement BG"), "SDL.AsmSyntaxColorPC", this);
+
+	subMenu->addAction(pcColorAct);
+
 	optMenu->addSeparator();
 
 	// Symbols
@@ -430,6 +466,16 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	symMenu->addAction(act);
 
 	symMenu->addSeparator();
+
+	// Symbols -> Show Byte Codes
+	act = new QAction(tr("Show &Byte Codes"), this);
+	//act->setShortcut(QKeySequence( tr("F7") ) );
+	act->setStatusTip(tr("Show &Byte Codes"));
+	act->setCheckable(true);
+	act->setChecked(false);
+	connect( act, SIGNAL(triggered(bool)), this, SLOT(displayByteCodesCB(bool)) );
+
+	symMenu->addAction(act);
 
 	// Symbols -> Display ROM Offsets
 	act = new QAction(tr("Show ROM &Offsets"), this);
@@ -975,6 +1021,13 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	restoreGeometry(settings.value("debugger/geometry").toByteArray());
 
 	setCpuStatusFont( cpuFont );
+
+	   opcodeColorAct->connectColor( &asmView->opcodeColor );
+	  addressColorAct->connectColor( &asmView->addressColor );
+	immediateColorAct->connectColor( &asmView->immediateColor );
+	    labelColorAct->connectColor( &asmView->labelColor  );
+	  commentColorAct->connectColor( &asmView->commentColor);
+	       pcColorAct->connectColor( &asmView->pcBgColor);
 }
 //----------------------------------------------------------------------------
 ConsoleDebugger::~ConsoleDebugger(void)
@@ -1841,6 +1894,11 @@ void ConsoleDebugger::instructionsThresChanged(const QString &txt)
 	{
 		break_instructions_limit = strtoul( s.c_str(), NULL, 10 );
 	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::displayByteCodesCB( bool value )
+{
+	asmView->setDisplayByteCodes(value);
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::displayROMoffsetCB( bool value )
@@ -2773,11 +2831,11 @@ void  QAsmView::updateAssemblyView(void)
 			for (int j = 0; j < size; j++)
 			{
 				sprintf(chr, "%02X ", opcode[j] = GetMem(addr++));
-				line.append(chr);
+				if ( showByteCodes ) line.append(chr);
 			}
 			while (size < 3)
 			{
-				line.append("   ");  //pad output to align ASM
+				if ( showByteCodes ) line.append("   ");  //pad output to align ASM
 				size++;
 			}
 
@@ -2793,7 +2851,7 @@ void  QAsmView::updateAssemblyView(void)
 		// special case: an RTS opcode
 		if (GetMem(instruction_addr) == 0x60)
 		{
-			line.append("-------------------------");
+			line.append(" -------------------------");
 		}
 
 		if ( symbolicDebugEnable )
@@ -2852,6 +2910,8 @@ void  QAsmView::updateAssemblyView(void)
 							{
 								stmp[j] = ' '; j++;
 							}
+							stmp[j] = ';'; j++;
+							stmp[j] = ' '; j++;
 						}
 						stmp[j] = c[i]; j++; i++;
 					}
@@ -3663,6 +3723,20 @@ QAsmView::QAsmView(QWidget *parent)
 
 	useDarkTheme = false;
 
+	pcBgColor.setRgb( 255, 255, 0 );
+	opcodeColor.setRgb( 46, 139, 87 );
+	labelColor.setRgb( 165,  42, 42 );
+	commentColor.setRgb( 0, 0, 255 );
+	addressColor.setRgb( 106, 90, 205 );
+	immediateColor.setRgb( 255, 1, 255 );
+
+	fceuLoadConfigColor( "SDL.AsmSyntaxColorOpcode"   , &opcodeColor );
+	fceuLoadConfigColor( "SDL.AsmSyntaxColorAddress"  , &addressColor );
+	fceuLoadConfigColor( "SDL.AsmSyntaxColorImmediate", &immediateColor );
+	fceuLoadConfigColor( "SDL.AsmSyntaxColorLabel"    , &labelColor );
+	fceuLoadConfigColor( "SDL.AsmSyntaxColorComment"  , &commentColor );
+	fceuLoadConfigColor( "SDL.AsmSyntaxColorPC"       , &pcBgColor );
+
 	g_config->getOption("SDL.DebuggerAsmFont", &fontString);
 
 	if ( fontString.size() > 0 )
@@ -3714,14 +3788,13 @@ QAsmView::QAsmView(QWidget *parent)
 
 	calcFontData();
 
-	setMinimumWidth( 50 * pxCharWidth );
-
 	vbar = NULL;
 	hbar = NULL;
 	asmPC = NULL;
 	displayROMoffsets = false;
 	symbolicDebugEnable = true;
 	registerNameEnable = true;
+	showByteCodes = false;
 	maxLineLen = 0;
 	pxLineWidth = 0;
 	lineOffset = 0;
@@ -3761,6 +3834,7 @@ QAsmView::QAsmView(QWidget *parent)
 	//printf("clipboard->supportsSelection() : '%i' \n", clipboard->supportsSelection() );
 	//printf("clipboard->supportsFindBuffer(): '%i' \n", clipboard->supportsFindBuffer() );
 
+	calcLineOffsets();
 }
 //----------------------------------------------------------------------------
 QAsmView::~QAsmView(void)
@@ -3775,6 +3849,14 @@ void QAsmView::asmClear(void)
 		delete asmEntry[i];
 	}
 	asmEntry.clear();
+}
+//----------------------------------------------------------------------------
+void QAsmView::calcLineOffsets(void)
+{
+	pcLocLinePos    = 4;
+	byteCodeLinePos = pcLocLinePos + 8; // 12;
+	opcodeLinePos   = byteCodeLinePos + (showByteCodes ? 10 : 1); //22;
+	operandLinePos  = opcodeLinePos + 3; // 25;
 }
 //----------------------------------------------------------------------------
 void QAsmView::setLine(int lineNum)
@@ -3848,6 +3930,21 @@ void QAsmView::scrollToPC(void)
 	}
 }
 //----------------------------------------------------------------------------
+void QAsmView::setDisplayByteCodes( bool value )
+{
+	if ( value != showByteCodes )
+	{
+		showByteCodes = value;
+
+		calcLineOffsets();
+		calcMinimumWidth();
+
+		fceuWrapperLock();
+		updateAssemblyView();
+		fceuWrapperUnLock();
+	}
+}
+//----------------------------------------------------------------------------
 void QAsmView::setDisplayROMoffsets( bool value )
 {
 	if ( value != displayROMoffsets )
@@ -3902,12 +3999,26 @@ void QAsmView::calcFontData(void)
 #else
 	pxCharWidth = metrics.width(QLatin1Char('2'));
 #endif
-	pxCharHeight   = metrics.height();
+	pxCharHeight   = metrics.capHeight();
 	pxLineSpacing  = metrics.lineSpacing() * 1.25;
-	pxLineLead     = pxLineSpacing - pxCharHeight;
-	pxCursorHeight = pxCharHeight;
+	pxLineLead     = pxLineSpacing - metrics.height();
+	pxCursorHeight = metrics.height();
 
 	viewLines   = (viewHeight / pxLineSpacing) + 1;
+
+	calcMinimumWidth();
+}
+//----------------------------------------------------------------------------
+void QAsmView::calcMinimumWidth(void)
+{
+	if ( showByteCodes )
+	{
+		setMinimumWidth( 50 * pxCharWidth );
+	}
+	else
+	{
+		setMinimumWidth( 41 * pxCharWidth );
+	}
 }
 //----------------------------------------------------------------------------
 void QAsmView::setScrollBars( QScrollBar *h, QScrollBar *v )
@@ -3930,13 +4041,13 @@ bool QAsmView::event(QEvent *event)
 		opcodeValid = (line < asmEntry.size()) && (asmEntry[line]->size > 0) &&
 				(asmEntry[line]->type == dbg_asm_entry_t::ASM_TEXT);
 
-		showOpcodeDesc = (c.x() >= 22) && (c.x() < 25) && opcodeValid;
+		showOpcodeDesc = (c.x() >= opcodeLinePos) && (c.x() < operandLinePos) && opcodeValid;
 
-		if ( (c.x() > 25) && opcodeValid && (asmEntry[line]->sym.name.size() > 0) )
+		if ( (c.x() > operandLinePos) && opcodeValid && (asmEntry[line]->sym.name.size() > 0) )
 		{
-			size_t subStrLoc = asmEntry[line]->text.find( asmEntry[line]->sym.name, 25 );
+			size_t subStrLoc = asmEntry[line]->text.find( asmEntry[line]->sym.name, operandLinePos );
 
-			if ( (subStrLoc != std::string::npos) && (subStrLoc > 25) )
+			if ( (subStrLoc != std::string::npos) && (subStrLoc > operandLinePos) )
 			{
 				//printf("Line:%i asmEntry DB Sym: %zi  '%s'\n", line, subStrLoc, asmEntry[line]->sym.name.c_str() );
 				int symTextStart = subStrLoc;
@@ -4371,9 +4482,9 @@ void QAsmView::mousePressEvent(QMouseEvent * event)
 
 				if ( asmEntry[line]->sym.name.size() > 0 )
 				{
-					size_t subStrLoc = asmEntry[line]->text.find( asmEntry[line]->sym.name, 25 );
+					size_t subStrLoc = asmEntry[line]->text.find( asmEntry[line]->sym.name, operandLinePos );
 
-					if ( (subStrLoc != std::string::npos) && (subStrLoc > 25) )
+					if ( (subStrLoc != std::string::npos) && (subStrLoc > operandLinePos) )
 					{
 						//printf("Line:%i asmEntry DB Sym: %zi  '%s'\n", line, subStrLoc, asmEntry[line]->sym.name.c_str() );
 						symTextStart = subStrLoc;
@@ -4601,6 +4712,39 @@ void QAsmView::contextMenuEvent(QContextMenuEvent *event)
 	}
 }
 //----------------------------------------------------------------------------
+void QAsmView::drawPointerPC( QPainter *painter, int xl, int yl )
+{
+	int x, y, w, h, b, b2;
+	QPoint p[3];
+
+	b  = 2;
+	b2 = 2*b;
+
+	w =  pxCharWidth;
+	h = (pxCharHeight / 4);
+
+	x = xl + (pxCharWidth*2);
+	y = yl -  pxCharHeight + (pxCharHeight - h - b2)/2;
+
+	painter->fillRect( x, y, w, h+b2, Qt::black );
+
+	x = xl + (pxCharWidth*3);
+	y = yl;
+
+	p[0] = QPoint( x, y );
+	p[1] = QPoint( x, y-pxCharHeight );
+	p[2] = QPoint( x+pxCharWidth, y-(pxCharHeight/2) );
+
+	painter->setBrush(Qt::red);
+
+	painter->drawPolygon( p, 3 );
+
+	x = xl + (pxCharWidth*2);
+	y = yl -  pxCharHeight + (pxCharHeight - h)/2;
+
+	painter->fillRect( x+b, y, w, h, Qt::red );
+}
+//----------------------------------------------------------------------------
 void QAsmView::drawText( QPainter *painter, int x, int y, const char *txt )
 {
 	int i=0;
@@ -4609,6 +4753,146 @@ void QAsmView::drawText( QPainter *painter, int x, int y, const char *txt )
 	c[0] = 0; c[1] = 0;
 
 	while ( txt[i] != 0 )
+	{
+		c[0] = txt[i];
+		painter->drawText( x, y, tr(c) );
+		i++; x += pxCharWidth;
+	}
+}
+//----------------------------------------------------------------------------
+void QAsmView::drawAsmLine( QPainter *painter, int x, int y, const char *txt )
+{
+	int i=0;
+	char c[2];
+
+	c[0] = 0; c[1] = 0;
+
+	// CD Log Area
+	painter->setPen( this->palette().color(QPalette::WindowText));
+
+	while ( (i<pcLocLinePos) && (txt[i] != 0) )
+	{
+		c[0] = txt[i];
+		painter->drawText( x, y, tr(c) );
+		i++; x += pxCharWidth;
+	}
+
+	// Address Area
+	painter->setPen( this->palette().color(QPalette::WindowText));
+
+	while ( (i<byteCodeLinePos) && (txt[i] != 0) )
+	{
+		c[0] = txt[i];
+		painter->drawText( x, y, tr(c) );
+		i++; x += pxCharWidth;
+	}
+
+	// Byte Code Area
+	painter->setPen( this->palette().color(QPalette::WindowText));
+
+	while ( (i<opcodeLinePos) && (txt[i] != 0) )
+	{
+		c[0] = txt[i];
+		painter->drawText( x, y, tr(c) );
+		i++; x += pxCharWidth;
+	}
+
+	// Opcode Area
+	painter->setPen( opcodeColor );
+
+	while ( (i<operandLinePos) && (txt[i] != 0) )
+	{
+		c[0] = txt[i];
+		painter->drawText( x, y, tr(c) );
+		i++; x += pxCharWidth;
+	}
+
+	// Operand Area
+	painter->setPen( this->palette().color(QPalette::WindowText));
+
+	while ( (txt[i] != 0) )
+	{
+		if ( (txt[i] == '$') && isxdigit( txt[i+1] ) )
+		{
+			painter->setPen( addressColor );
+
+			c[0] = txt[i];
+			painter->drawText( x, y, tr(c) );
+			i++; x += pxCharWidth;
+
+			while ( isxdigit( txt[i] ) )
+			{
+				c[0] = txt[i];
+				painter->drawText( x, y, tr(c) );
+				i++; x += pxCharWidth;
+			}
+		}
+		else if ( (txt[i] == '#') && (txt[i+1] == '$') && isxdigit( txt[i+2] ) )
+		{
+			painter->setPen( immediateColor );
+
+			c[0] = txt[i];
+			painter->drawText( x, y, tr(c) );
+			i++; x += pxCharWidth;
+
+			c[0] = txt[i];
+			painter->drawText( x, y, tr(c) );
+			i++; x += pxCharWidth;
+
+			while ( isxdigit( txt[i] ) )
+			{
+				c[0] = txt[i];
+				painter->drawText( x, y, tr(c) );
+				i++; x += pxCharWidth;
+			}
+		}
+		else
+		{
+			painter->setPen( this->palette().color(QPalette::WindowText));
+			c[0] = txt[i];
+			painter->drawText( x, y, tr(c) );
+			i++; x += pxCharWidth;
+		}
+	}
+}
+//----------------------------------------------------------------------------
+void QAsmView::drawLabelLine( QPainter *painter, int x, int y, const char *txt )
+{
+	int i=0;
+	char c[2];
+
+	c[0] = 0; c[1] = 0;
+
+	// Label Text
+	painter->setPen( this->palette().color(QPalette::WindowText));
+
+	while ( (txt[i] != 0) )
+	{
+		if ( isalnum(txt[i]) || (txt[i] == '_') )
+		{
+			painter->setPen( labelColor );
+		}
+		else
+		{
+			painter->setPen( this->palette().color(QPalette::WindowText));
+		}
+		c[0] = txt[i];
+		painter->drawText( x, y, tr(c) );
+		i++; x += pxCharWidth;
+	}
+}
+//----------------------------------------------------------------------------
+void QAsmView::drawCommentLine( QPainter *painter, int x, int y, const char *txt )
+{
+	int i=0;
+	char c[2];
+
+	c[0] = 0; c[1] = 0;
+
+	// Comment Text
+	painter->setPen( commentColor );
+
+	while ( (txt[i] != 0) )
 	{
 		c[0] = txt[i];
 		painter->drawText( x, y, tr(c) );
@@ -4626,6 +4910,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 	QColor hlgtFG("white"), hlgtBG("blue");
 	bool forceDarkColor = false;
 	bool txtHlgtSet = false;
+	bool lineIsPC = false;
 	QPen pen;
 
 	painter.setFont(font);
@@ -4666,7 +4951,11 @@ void QAsmView::paintEvent(QPaintEvent *event)
 
 	painter.fillRect( 0, 0, viewWidth, viewHeight, this->palette().color(QPalette::Window) );
 	painter.fillRect( 0, 0, cd_boundary, viewHeight, this->palette().color(QPalette::Mid) );
-	painter.fillRect( asm_start_boundary, 0, (9*pxCharWidth), viewHeight, this->palette().color(QPalette::AlternateBase) );
+
+	if ( showByteCodes )
+	{
+		painter.fillRect( asm_start_boundary, 0, (9*pxCharWidth), viewHeight, this->palette().color(QPalette::AlternateBase) );
+	}
 
 	y = pxLineSpacing;
 
@@ -4683,18 +4972,27 @@ void QAsmView::paintEvent(QPaintEvent *event)
 		{
 			if ( l == asmPC->line )
 			{
-				painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("pink") );
+				painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, pcBgColor );
 				forceDarkColor = true;
+				lineIsPC = true;
 			}
+			else
+			{
+				lineIsPC = false;
+			}
+		}
+		else
+		{
+			lineIsPC = false;
 		}
 
 		if ( l < asmEntry.size() )
 		{
-			if ( asmEntry[l]->type != dbg_asm_entry_t::ASM_TEXT )
-			{
-				painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("light blue") );
-				forceDarkColor = true;
-			}
+			//if ( asmEntry[l]->type != dbg_asm_entry_t::ASM_TEXT )
+			//{
+			//	painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, QColor("light blue") );
+			//	forceDarkColor = true;
+			//}
 
 			if ( forceDarkColor )
 			{
@@ -4704,7 +5002,18 @@ void QAsmView::paintEvent(QPaintEvent *event)
 			{
 				painter.setPen( this->palette().color(QPalette::WindowText));
 			}
-			drawText( &painter, x, y, asmEntry[l]->text.c_str() );
+			if ( asmEntry[l]->type == dbg_asm_entry_t::ASM_TEXT )
+			{
+				drawAsmLine( &painter, x, y, asmEntry[l]->text.c_str() );
+			}
+			else if ( asmEntry[l]->type == dbg_asm_entry_t::SYMBOL_NAME )
+			{
+				drawLabelLine( &painter, x, y, asmEntry[l]->text.c_str() );
+			}
+			else
+			{
+				drawCommentLine( &painter, x, y, asmEntry[l]->text.c_str() );
+			}
 
 			if ( (selAddrLine == l) )
 			{	// Highlight ASM line for selected address.
@@ -4798,6 +5107,27 @@ void QAsmView::paintEvent(QPaintEvent *event)
 
 		if ( l < asmEntry.size() )
 		{
+			if ( asmPC != NULL )
+			{
+				if ( l == asmPC->line )
+				{
+					lineIsPC = true;
+				}
+				else
+				{
+					lineIsPC = false;
+				}
+			}
+			else
+			{
+				lineIsPC = false;
+			}
+
+			if ( lineIsPC )
+			{
+				drawPointerPC( &painter, x, y );
+			}
+
 			if ( asmEntry[l]->bpNum >= 0 )
 			{
 				painter.drawEllipse( cd_boundary - pxCharWidth2, y - pxLineSpacing + pxLineLead + vOffset, pxCharWidth, pxCharWidth );
@@ -4947,6 +5277,11 @@ DebuggerStackDisplay::DebuggerStackDisplay(QWidget *parent)
 	QFont font;
 	std::string fontString;
 
+	stackBytesPerLine = 4;
+	showAddrs = true;
+
+	recalcCharsPerLine();
+
 	g_config->getOption("SDL.DebuggerStackFont", &fontString);
 
 	if ( fontString.size() > 0 )
@@ -4963,17 +5298,12 @@ DebuggerStackDisplay::DebuggerStackDisplay(QWidget *parent)
 
 	QFontMetrics fm(font);
 
-	stackBytesPerLine = 4;
-	showAddrs = true;
-
 #if QT_VERSION > QT_VERSION_CHECK(5, 11, 0)
 	pxCharWidth = fm.horizontalAdvance(QLatin1Char('2'));
 #else
 	pxCharWidth = fm.width(QLatin1Char('2'));
 #endif
 	pxLineSpacing = fm.lineSpacing();
-
-	recalcCharsPerLine();
 
 	setMinimumWidth( pxCharWidth * charsPerLine );
 	setMinimumHeight( pxLineSpacing *  5 );

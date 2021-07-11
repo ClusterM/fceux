@@ -28,6 +28,7 @@
 
 #include "Qt/main.h"
 #include "Qt/SymbolicDebug.h"
+#include "Qt/ColorMenu.h"
 #include "../../debug.h"
 
 struct dbg_asm_entry_t
@@ -114,6 +115,7 @@ class QAsmView : public QWidget
 		void setDisplayROMoffsets( bool value );
 		void setSymbolDebugEnable( bool value );
 		void setRegisterNameEnable( bool value );
+		void setDisplayByteCodes( bool value );
 		int  getCtxMenuAddr(void){ return ctxMenuAddr; };
 		int  getCursorAddr(void){ return cursorLineAddr; };
 		void setPC_placement( int mode, int ofs = 0 );
@@ -122,6 +124,14 @@ class QAsmView : public QWidget
 		int  isBreakpointAtAddr( int addr );
 		void determineLineBreakpoints(void);
 		void setFont( const QFont &font );
+
+		QColor  opcodeColor;
+		QColor  addressColor;
+		QColor  immediateColor;
+		QColor  commentColor;
+		QColor  labelColor;
+		QColor  pcBgColor;
+
 	protected:
 		bool event(QEvent *event) override;
 		void paintEvent(QPaintEvent *event);
@@ -137,11 +147,17 @@ class QAsmView : public QWidget
 		void toggleBreakpoint(int line);
 
 		void calcFontData(void);
+		void calcMinimumWidth(void);
+		void calcLineOffsets(void);
 		QPoint convPixToCursor( QPoint p );
 		bool textIsHighlighted(void);
 		void setHighlightEndCoord( int x, int y );
 		void loadClipboard( const char *txt );
 		void drawText( QPainter *painter, int x, int y, const char *txt );
+		void drawAsmLine( QPainter *painter, int x, int y, const char *txt );
+		void drawLabelLine( QPainter *painter, int x, int y, const char *txt );
+		void drawCommentLine( QPainter *painter, int x, int y, const char *txt );
+		void drawPointerPC( QPainter *painter, int xl, int yl );
 
 	private:
 		ConsoleDebugger *parent;
@@ -169,6 +185,10 @@ class QAsmView : public QWidget
 		int cursorLineAddr;
 		int pcLinePlacement;
 		int pcLineOffset;
+		int pcLocLinePos;
+		int byteCodeLinePos;
+		int opcodeLinePos;
+		int operandLinePos;
 
 		int  selAddrLine;
 		int  selAddrChar;
@@ -193,6 +213,7 @@ class QAsmView : public QWidget
 		bool  symbolicDebugEnable;
 		bool  registerNameEnable;
 		bool  mouseLeftBtnDown;
+		bool  showByteCodes;
 
 };
 
@@ -298,6 +319,13 @@ class ConsoleDebugger : public QDialog
 		QTimer    *periodicTimer;
 		QFont      font;
 
+		ColorMenuItem *opcodeColorAct;
+		ColorMenuItem *addressColorAct;
+		ColorMenuItem *immediateColorAct;
+		ColorMenuItem *commentColorAct;
+		ColorMenuItem *labelColorAct;
+		ColorMenuItem *pcColorAct;
+
 		int   selBmAddrVal;
 		bool  windowUpdateReq;
 
@@ -336,6 +364,7 @@ class ConsoleDebugger : public QDialog
 		void delete_BM_CB(void);
 		void resetCountersCB (void);
 		void reloadSymbolsCB(void);
+		void displayByteCodesCB(bool value);
 		void displayROMoffsetCB(bool value);
 		void symbolDebugEnableCB(bool value);
 		void registerNameEnableCB(bool value);
