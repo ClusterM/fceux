@@ -88,26 +88,30 @@ static int  lastBpIdx   = 0;
 ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	: QDialog( parent, Qt::Window )
 {
-	QVBoxLayout *mainLayoutv;
-	QHBoxLayout *mainLayouth;
-	QVBoxLayout *vbox, *vbox1, *vbox2, /* *vbox3,*/ *vbox4;
-	QHBoxLayout *hbox, *hbox1, *hbox2, *hbox3;
 	QGridLayout *grid;
-	QPushButton *button;
-	QFrame      *frame;
-	QLabel      *lbl;
 	QMenuBar    *menuBar;
-	QMenu       *fileMenu, *viewMenu, *debugMenu,
-		    *optMenu, *symMenu, *subMenu;
-	QActionGroup *actGroup;
-	QAction     *act;
-	float fontCharWidth;
-	QTreeWidgetItem * item;
-	int opt, useNativeMenuBar;
-	//fceuDecIntValidtor *validator;
 	QSettings settings;
 	QFont cpuFont;
 	std::string fontString;
+
+	cpuStatDpyVis = 1;
+	ppuStatDpyVis = 1;
+	bpTreeDpyVis  = 1;
+	bmTreeDpyVis  = 1;
+
+	cpuStatDpyCol = 0;
+	ppuStatDpyCol = 0;
+	bpTreeDpyCol  = 0;
+	bmTreeDpyCol  = 0;
+
+	g_config->getOption( "SDL.DebuggerCpuDpyVis", &cpuStatDpyVis);
+	g_config->getOption( "SDL.DebuggerPpuDpyVis", &ppuStatDpyVis);
+	g_config->getOption( "SDL.DebuggerBpDpyVis" ,  &bpTreeDpyVis);
+	g_config->getOption( "SDL.DebuggerBmDpyVis" ,  &bmTreeDpyVis);
+	g_config->getOption( "SDL.DebuggerCpuDpyCol", &cpuStatDpyCol);
+	g_config->getOption( "SDL.DebuggerPpuDpyCol", &ppuStatDpyCol);
+	g_config->getOption( "SDL.DebuggerBpDpyCol" ,  &bpTreeDpyCol);
+	g_config->getOption( "SDL.DebuggerBmDpyCol" ,  &bmTreeDpyCol);
 
 	g_config->getOption("SDL.DebuggerCpuStatusFont", &fontString);
 
@@ -127,14 +131,162 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	font.setStyleHint( QFont::Monospace );
 	QFontMetrics fm(font);
 
-	fontCharWidth = fm.averageCharWidth();
-
 	setWindowTitle("6502 Debugger");
 
 	//resize( 512, 512 );
 	
-	menuBar = new QMenuBar(this);
-	toolBar = new QToolBar(this);
+	menuBar = buildMenuBar();
+	toolBar = buildToolBar();
+
+	mainLayoutv = new QVBoxLayout();
+	mainLayouth = new QHBoxLayout();
+
+	mainLayoutv->setMenuBar( menuBar );
+	mainLayoutv->addWidget( toolBar );
+	mainLayoutv->addLayout( mainLayouth );
+
+	grid       = new QGridLayout();
+	asmView    = new QAsmView(this);
+	vbar       = new QScrollBar( Qt::Vertical, this );
+	hbar       = new QScrollBar( Qt::Horizontal, this );
+	asmLineSelLbl = new QLabel( tr("Line Select") );
+	emuStatLbl    = new QLabel( tr("Emulator is Running") );
+
+	asmLineSelLbl->setWordWrap( true );
+
+	asmView->setScrollBars( hbar, vbar );
+
+	grid->addWidget( asmView, 0, 0 );
+	grid->addWidget( vbar   , 0, 1 );
+	grid->addWidget( hbar   , 1, 0 );
+
+	 asmDpyVbox   = new QVBoxLayout();
+	dataDpyVbox1  = new QVBoxLayout();
+	dataDpyVbox2  = new QVBoxLayout();
+
+	bpDataDpyVbox = dataDpyVbox1;
+	bmDataDpyVbox = dataDpyVbox2;
+
+	hbar->setMinimum(0);
+	hbar->setMaximum(100);
+	vbar->setMinimum(0);
+	vbar->setMaximum( 0x10000 );
+
+	asmDpyVbox->addLayout( grid, 100 );
+	asmDpyVbox->addWidget( asmLineSelLbl, 1 );
+	asmDpyVbox->addWidget( emuStatLbl   , 1 );
+	//asmText->setFont(font);
+	//asmText->setReadOnly(true);
+	//asmText->setOverwriteMode(true);
+	//asmText->setMinimumWidth( 20 * fontCharWidth );
+	//asmText->setLineWrapMode( QPlainTextEdit::NoWrap );
+
+	mainLayouth->addLayout(  asmDpyVbox , 50 );
+	mainLayouth->addLayout( dataDpyVbox1, 40 );
+	mainLayouth->addLayout( dataDpyVbox2, 40 );
+
+	buildCpuListDisplay();
+	buildPpuListDisplay();
+	buildBpListDisplay();
+	buildBmListDisplay();
+
+	loadDisplayViews();
+
+	setLayout( mainLayoutv );
+
+	windowUpdateReq   = true;
+
+	dbgWin = this;
+
+	periodicTimer  = new QTimer( this );
+
+	connect( periodicTimer, &QTimer::timeout, this, &ConsoleDebugger::updatePeriodic );
+	connect( hbar, SIGNAL(valueChanged(int)), this, SLOT(hbarChanged(int)) );
+	connect( vbar, SIGNAL(valueChanged(int)), this, SLOT(vbarChanged(int)) );
+
+	bpListUpdate( false );
+
+	periodicTimer->start( 100 ); // 10hz
+
+	// If this is the first debug window to open, load breakpoints fresh
+	{ 
+		int autoLoadDebug;
+
+		g_config->getOption( "SDL.AutoLoadDebugFiles", &autoLoadDebug );
+
+		if ( autoLoadDebug )
+		{
+			loadGameDebugBreakpoints();
+		}
+	}
+
+	restoreGeometry(settings.value("debugger/geometry").toByteArray());
+
+	setCpuStatusFont( cpuFont );
+
+	   opcodeColorAct->connectColor( &asmView->opcodeColor );
+	  addressColorAct->connectColor( &asmView->addressColor );
+	immediateColorAct->connectColor( &asmView->immediateColor );
+	    labelColorAct->connectColor( &asmView->labelColor  );
+	  commentColorAct->connectColor( &asmView->commentColor);
+	       pcColorAct->connectColor( &asmView->pcBgColor);
+}
+//----------------------------------------------------------------------------
+ConsoleDebugger::~ConsoleDebugger(void)
+{
+	std::list <ConsoleDebugger*>::iterator it;
+
+	//printf("Destroy Debugger Window\n");
+	periodicTimer->stop();
+
+	if ( dbgWin == this )
+	{
+		dbgWin = NULL;
+	}
+
+	if ( dbgWin == NULL )
+	{
+		saveGameDebugBreakpoints();
+		debuggerClearAllBreakpoints();
+		debuggerClearAllBookmarks();
+
+		if ( waitingAtBp )
+		{
+			FCEUI_SetEmulationPaused(0);
+		}
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::closeEvent(QCloseEvent *event)
+{
+	QSettings settings;
+	//printf("Debugger Close Window Event\n");
+	settings.setValue("debugger/geometry", saveGeometry());
+	done(0);
+	deleteLater();
+	event->accept();
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::closeWindow(void)
+{
+	QSettings settings;
+	//printf("Close Window\n");
+	settings.setValue("debugger/geometry", saveGeometry());
+	done(0);
+	deleteLater();
+}
+//----------------------------------------------------------------------------
+QMenuBar *ConsoleDebugger::buildMenuBar(void)
+{
+	QMenu       *fileMenu, *viewMenu, *debugMenu,
+		    *optMenu, *symMenu, *subMenu, *visMenu;
+	QActionGroup *actGroup;
+	QAction     *act;
+	int opt, useNativeMenuBar=0;
+	int *iPtr;
+	bool *bPtr;
+
+	QMenuBar *menuBar = new QMenuBar(this);
 
 	// This is needed for menu bar to show up on MacOS
 	g_config->getOption( "SDL.UseNativeMenuBar", &useNativeMenuBar );
@@ -185,6 +337,164 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	connect(act, SIGNAL(triggered()), this, SLOT(openChangePcDialog(void)) );
 
 	viewMenu->addAction(act);
+
+	viewMenu->addSeparator();
+
+	// View -> CPU Status
+	visMenu = viewMenu->addMenu( tr("&CPU Status") );
+
+	// View -> CPU Status -> Visible
+	act = new QAction(tr("&Visible"), this);
+	act->setCheckable(true);
+	act->setChecked(cpuStatDpyVis);
+	//act->setShortcut( QKeySequence(tr("Ctrl+Shift+G") ));
+	act->setStatusTip(tr("&Visible"));
+	bPtr = &cpuStatDpyVis;
+	connect( act, &QAction::triggered, [ this, act, bPtr ] { setDisplayVisibility( act, bPtr ); } );
+
+	visMenu->addAction(act);
+
+	subMenu  = visMenu->addMenu( tr("&Column") );
+	actGroup = new QActionGroup(this);
+
+	actGroup->setExclusive(true);
+
+	// View -> CPU Status List -> Left
+	act = new QAction(tr("&Left"), this);
+	act->setStatusTip(tr("Left"));
+	act->setCheckable(true);
+	act->setChecked( cpuStatDpyCol == 0 );
+	iPtr = &cpuStatDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 0 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> CPU Status -> Right
+	act = new QAction(tr("&Right"), this);
+	act->setStatusTip(tr("Right"));
+	act->setCheckable(true);
+	act->setChecked( cpuStatDpyCol == 1 );
+	iPtr = &cpuStatDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 1 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> PPU Status
+	visMenu = viewMenu->addMenu( tr("&PPU Status") );
+
+	// View -> PPU Status -> Visible
+	act = new QAction(tr("&Visible"), this);
+	act->setCheckable(true);
+	act->setChecked(ppuStatDpyVis);
+	//act->setShortcut( QKeySequence(tr("Ctrl+Shift+G") ));
+	act->setStatusTip(tr("&Visible"));
+	bPtr = &ppuStatDpyVis;
+	connect( act, &QAction::triggered, [ this, act, bPtr ] { setDisplayVisibility( act, bPtr ); } );
+
+	visMenu->addAction(act);
+
+	subMenu  = visMenu->addMenu( tr("&Column") );
+	actGroup = new QActionGroup(this);
+
+	actGroup->setExclusive(true);
+
+	// View -> PPU Status List -> Left
+	act = new QAction(tr("&Left"), this);
+	act->setStatusTip(tr("Left"));
+	act->setCheckable(true);
+	act->setChecked( ppuStatDpyCol == 0 );
+	iPtr = &ppuStatDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 0 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> PPU Status -> Right
+	act = new QAction(tr("&Right"), this);
+	act->setStatusTip(tr("Right"));
+	act->setCheckable(true);
+	act->setChecked( ppuStatDpyCol == 1 );
+	iPtr = &ppuStatDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 1 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> Breakpoint List
+	visMenu = viewMenu->addMenu( tr("&Breakpoint List") );
+
+	// View -> Breakpoint List -> Visible
+	act = new QAction(tr("&Visible"), this);
+	act->setCheckable(true);
+	act->setChecked(bpTreeDpyVis);
+	//act->setShortcut( QKeySequence(tr("Ctrl+Shift+G") ));
+	act->setStatusTip(tr("&Visible"));
+	bPtr = &bpTreeDpyVis;
+	connect( act, &QAction::triggered, [ this, act, bPtr ] { setDisplayVisibility( act, bPtr ); } );
+
+	visMenu->addAction(act);
+
+	subMenu  = visMenu->addMenu( tr("&Column") );
+	actGroup = new QActionGroup(this);
+
+	actGroup->setExclusive(true);
+
+	// View -> Breakpoint List -> Left
+	act = new QAction(tr("&Left"), this);
+	act->setStatusTip(tr("Left"));
+	act->setCheckable(true);
+	act->setChecked( bpTreeDpyCol == 0 );
+	iPtr = &bpTreeDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 0 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> Breakpoint List -> Right
+	act = new QAction(tr("&Right"), this);
+	act->setStatusTip(tr("Right"));
+	act->setCheckable(true);
+	act->setChecked( bpTreeDpyCol == 1 );
+	iPtr = &bpTreeDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 1 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> Bookmark List
+	visMenu = viewMenu->addMenu( tr("Book&mark List") );
+
+	// View -> Bookmark List -> Visible
+	act = new QAction(tr("&Visible"), this);
+	act->setCheckable(true);
+	act->setChecked(bmTreeDpyVis);
+	//act->setShortcut( QKeySequence(tr("Ctrl+Shift+G") ));
+	act->setStatusTip(tr("&Visible"));
+	bPtr = &bmTreeDpyVis;
+	connect( act, &QAction::triggered, [ this, act, bPtr ] { setDisplayVisibility( act, bPtr ); } );
+
+	visMenu->addAction(act);
+
+	subMenu  = visMenu->addMenu( tr("&Column") );
+	actGroup = new QActionGroup(this);
+
+	actGroup->setExclusive(true);
+
+	// View -> Bookmark List -> Left
+	act = new QAction(tr("&Left"), this);
+	act->setStatusTip(tr("Left"));
+	act->setCheckable(true);
+	act->setChecked( bmTreeDpyCol == 0 );
+	iPtr = &bmTreeDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 0 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
+
+	// View -> Bookmark List -> Right
+	act = new QAction(tr("&Right"), this);
+	act->setStatusTip(tr("Right"));
+	act->setCheckable(true);
+	act->setChecked( bmTreeDpyCol == 1 );
+	iPtr = &bmTreeDpyCol;
+	connect( act, &QAction::triggered, [ this, iPtr ] { setViewDpyCol( iPtr, 1 ); } );
+	actGroup->addAction(act);
+	subMenu->addAction(act);
 
 	// Debug
 	debugMenu = menuBar->addMenu(tr("&Debug"));
@@ -511,6 +821,15 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	// Menu End
 	//-----------------------------------------------------------------------
 	
+	return menuBar;
+}
+//----------------------------------------------------------------------------
+QToolBar *ConsoleDebugger::buildToolBar(void)
+{
+	QAction     *act;
+
+	QToolBar *toolBar = new QToolBar(this);
+
 	//-----------------------------------------------------------------------
 	// Tool Bar Setup Start
 	//-----------------------------------------------------------------------
@@ -601,63 +920,53 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	// Tool Bar Setup End
 	//-----------------------------------------------------------------------
 	
-	mainLayoutv = new QVBoxLayout();
-	mainLayouth = new QHBoxLayout();
+	return toolBar;
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::buildCpuListDisplay(void)
+{
+	QVBoxLayout *vbox1;
+	QHBoxLayout *hbox, *hbox1;
+	QGridLayout *grid;
+	QLabel      *lbl;
+	QFont        cpuFont;
+	std::string  fontString;
+	int          fontCharWidth;
 
-	mainLayoutv->setMenuBar( menuBar );
-	mainLayoutv->addWidget( toolBar );
-	mainLayoutv->addLayout( mainLayouth );
+	g_config->getOption("SDL.DebuggerCpuStatusFont", &fontString);
 
-	vbox4      = new QVBoxLayout();
-	grid       = new QGridLayout();
-	asmView    = new QAsmView(this);
-	vbar       = new QScrollBar( Qt::Vertical, this );
-	hbar       = new QScrollBar( Qt::Horizontal, this );
-	asmLineSelLbl = new QLabel( tr("Line Select") );
-	emuStatLbl    = new QLabel( tr("Emulator is Running") );
+	if ( fontString.size() > 0 )
+	{
+		cpuFont.fromString( QString::fromStdString( fontString ) );
+	}
+	else
+	{
+		cpuFont.setFamily("Courier New");
+		cpuFont.setStyle( QFont::StyleNormal );
+		cpuFont.setStyleHint( QFont::Monospace );
+	}
 
-	asmLineSelLbl->setWordWrap( true );
+	QFontMetrics fm(cpuFont);
 
-	asmView->setScrollBars( hbar, vbar );
-
-	grid->addWidget( asmView, 0, 0 );
-	grid->addWidget( vbar   , 0, 1 );
-	grid->addWidget( hbar   , 1, 0 );
+	fontCharWidth = fm.averageCharWidth();
 
 	vbox1   = new QVBoxLayout();
-	vbox2   = new QVBoxLayout();
 	hbox1   = new QHBoxLayout();
-
-	hbar->setMinimum(0);
-	hbar->setMaximum(100);
-	vbar->setMinimum(0);
-	vbar->setMaximum( 0x10000 );
-
-	vbox4->addLayout( grid, 100 );
-	vbox4->addWidget( asmLineSelLbl, 1 );
-	vbox4->addWidget( emuStatLbl   , 1 );
-	//asmText->setFont(font);
-	//asmText->setReadOnly(true);
-	//asmText->setOverwriteMode(true);
-	//asmText->setMinimumWidth( 20 * fontCharWidth );
-	//asmText->setLineWrapMode( QPlainTextEdit::NoWrap );
-
-	mainLayouth->addLayout( vbox4, 5 );
-	mainLayouth->addLayout( vbox1, 4 );
 
 	cpuFrame = new QGroupBox( tr("CPU Status") );
 	grid     = new QGridLayout();
 
-	vbox1->addWidget( cpuFrame );
-	hbox1->addLayout( vbox2, 1 );
-	vbox2->addLayout( grid  );
+	cpuFrame->setVisible(cpuStatDpyVis);
+
+	hbox1->addLayout( vbox1, 1 );
+	vbox1->addLayout( grid  );
 	cpuFrame->setLayout( hbox1 );
 
 	hbox = new QHBoxLayout();
 	lbl  = new QLabel( tr("PC:") );
 	lbl->setToolTip( tr("Program Counter Register") );
 	pcEntry = new QLineEdit();
-	pcEntry->setFont( font );
+	pcEntry->setFont( cpuFont );
 	pcEntry->setMaxLength( 4 );
 	pcEntry->setInputMask( ">HHHH;0" );
 	pcEntry->setAlignment(Qt::AlignCenter);
@@ -676,7 +985,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	lbl  = new QLabel( tr("A:") );
 	lbl->setToolTip( tr("Accumulator Register") );
 	regAEntry = new QLineEdit();
-	regAEntry->setFont( font );
+	regAEntry->setFont( cpuFont );
 	regAEntry->setMaxLength( 2 );
 	regAEntry->setInputMask( ">HH;0" );
 	regAEntry->setAlignment(Qt::AlignCenter);
@@ -691,7 +1000,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	lbl  = new QLabel( tr("X:") );
 	lbl->setToolTip( tr("X Index Register") );
 	regXEntry = new QLineEdit();
-	regXEntry->setFont( font );
+	regXEntry->setFont( cpuFont );
 	regXEntry->setMaxLength( 2 );
 	regXEntry->setInputMask( ">HH;0" );
 	regXEntry->setAlignment(Qt::AlignCenter);
@@ -706,7 +1015,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	lbl  = new QLabel( tr("Y:") );
 	lbl->setToolTip( tr("Y Index Register") );
 	regYEntry = new QLineEdit();
-	regYEntry->setFont( font );
+	regYEntry->setFont( cpuFont );
 	regYEntry->setMaxLength( 2 );
 	regYEntry->setInputMask( ">HH;0" );
 	regYEntry->setAlignment(Qt::AlignCenter);
@@ -721,7 +1030,7 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	lbl  = new QLabel( tr("P:") );
 	lbl->setToolTip( tr("Status Register") );
 	regPEntry = new QLineEdit();
-	regPEntry->setFont( font );
+	regPEntry->setFont( cpuFont );
 	regPEntry->setMaxLength( 2 );
 	regPEntry->setInputMask( ">HH;0" );
 	regPEntry->setAlignment(Qt::AlignCenter);
@@ -743,10 +1052,10 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	//cpuCycExdVal  = new QLineEdit( tr("0") );
 	//instrExdVal   = new QLineEdit( tr("0") );
 
-	cpuCyclesVal->setFont(font);
+	cpuCyclesVal->setFont(cpuFont);
 	cpuCyclesVal->setReadOnly(true);
 	cpuCyclesVal->setMinimumWidth( 24 * fontCharWidth );
-	cpuInstrsVal->setFont(font);
+	cpuInstrsVal->setFont(cpuFont);
 	cpuInstrsVal->setReadOnly(true);
 	cpuInstrsVal->setMinimumWidth( 24 * fontCharWidth );
 
@@ -776,52 +1085,6 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	stackText->setWordWrapMode( QTextOption::NoWrap );
 	//stackText->setHorizontalScrollBarPolicy( Qt::ScrollBarAlwaysOff );
 	//stackText->setMaximumWidth( 16 * fontCharWidth );
-
-	bpFrame = new QGroupBox(tr("Breakpoints"));
-	//vbox3   = new QVBoxLayout();
-	vbox    = new QVBoxLayout();
-	bpTree  = new QTreeWidget();
-
-	bpTree->setColumnCount(2);
-	bpTree->setSelectionMode( QAbstractItemView::SingleSelection );
-
-	item = new QTreeWidgetItem();
-	item->setFont( 0, font );
-	item->setFont( 1, font );
-	item->setFont( 2, font );
-	item->setFont( 3, font );
-	item->setText( 0, QString::fromStdString( "Addr" ) );
-	item->setText( 1, QString::fromStdString( "Flags" ) );
-	item->setText( 2, QString::fromStdString( "Cond" ) );
-	item->setText( 3, QString::fromStdString( "Desc" ) );
-	item->setTextAlignment( 0, Qt::AlignCenter);
-	item->setTextAlignment( 1, Qt::AlignCenter);
-	item->setTextAlignment( 2, Qt::AlignCenter);
-	item->setTextAlignment( 3, Qt::AlignCenter);
-
-	bpTree->setHeaderItem( item );
-
-	bpTree->header()->setSectionResizeMode( QHeaderView::ResizeToContents );
-
-	connect( bpTree, SIGNAL(itemClicked(QTreeWidgetItem*, int)),
-			   this, SLOT(bpItemClicked( QTreeWidgetItem*, int)) );
-
-	hbox   = new QHBoxLayout();
-	button = new QPushButton( tr("Add") );
-	hbox->addWidget( button );
-	connect( button, SIGNAL(clicked(void)), this, SLOT(add_BP_CB(void)) );
-
-	button = new QPushButton( tr("Delete") );
-	hbox->addWidget( button );
-	connect( button, SIGNAL(clicked(void)), this, SLOT(delete_BP_CB(void)) );
-
-	button = new QPushButton( tr("Edit") );
-	hbox->addWidget( button );
-	connect( button, SIGNAL(clicked(void)), this, SLOT(edit_BP_CB(void)) );
-
-	vbox->addWidget( bpTree );
-	vbox->addLayout( hbox   );
-	bpFrame->setLayout( vbox );
 
 	sfFrame = new QGroupBox(tr("Status Flags"));
 	grid    = new QGridLayout();
@@ -855,79 +1118,123 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	grid->addWidget( Z_chkbox, 1, 3, Qt::AlignLeft );
 	grid->addWidget( C_chkbox, 1, 4, Qt::AlignLeft );
 
-	vbox1->addWidget( bpFrame);
-	vbox2->addWidget( sfFrame);
-	//hbox1->addLayout( vbox3  );
+	vbox1->addWidget( sfFrame);
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::buildPpuListDisplay(void)
+{
+	QVBoxLayout *vbox;
 
-	hbox2       = new QHBoxLayout();
+	ppuStatContainerWidget = new QWidget(this);
+
 	vbox        = new QVBoxLayout();
-	frame       = new QFrame();
+	ppuFrame    = new QGroupBox( tr("PPU Status") );
 	ppuLbl      = new QLabel( tr("PPU:") );
 	spriteLbl   = new QLabel( tr("Sprite:") );
 	scanLineLbl = new QLabel( tr("Scanline:") );
 	pixLbl      = new QLabel( tr("Pixel:") );
+
+	ppuFrame->setVisible(ppuStatDpyVis);
+	ppuFrame->setCheckable(true);
+	ppuFrame->setChecked(true);
+	connect( ppuFrame, SIGNAL(toggled(bool)), this, SLOT(setPpuFrameVis(bool)) );
+
 	vbox->addWidget( ppuLbl );
 	vbox->addWidget( spriteLbl );
 	vbox->addWidget( scanLineLbl );
 	vbox->addWidget( pixLbl );
-	vbox1->addLayout( hbox2 );
-	hbox2->addWidget( frame );
-	frame->setLayout( vbox  );
-	frame->setFrameShape( QFrame::Box );
 
-	//vbox          = new QVBoxLayout();
-	//cpuCyclesLbl1 = new QLabel( tr("CPU Cycles:") );
-	//cpuCyclesLbl2 = new QLabel( tr("(+0):") );
-	//cpuInstrsLbl1 = new QLabel( tr("Instructions:") );
-	//cpuInstrsLbl2 = new QLabel( tr("(+0):") );
-	//brkCpuCycExd  = new QCheckBox( tr("Break when Exceed") );
-	//brkInstrsExd  = new QCheckBox( tr("Break when Exceed") );
-	//cpuCycExdVal  = new QLineEdit( tr("0") );
-	//instrExdVal   = new QLineEdit( tr("0") );
-	//hbox          = new QHBoxLayout();
-	//vbox->addLayout( hbox );
-	//hbox->addWidget( cpuCyclesLbl1 );
-	//hbox->addWidget( cpuCyclesLbl2 );
-	//hbox         = new QHBoxLayout();
-	//vbox->addLayout( hbox );
-	//hbox->addWidget( brkCpuCycExd );
-	//hbox->addWidget( cpuCycExdVal, 1, Qt::AlignLeft );
+	ppuStatContainerWidget->setLayout( vbox  );
 
-	//hbox         = new QHBoxLayout();
-	//vbox->addLayout( hbox );
-	//hbox->addWidget( cpuInstrsLbl1 );
-	//hbox->addWidget( cpuInstrsLbl2 );
-	//hbox         = new QHBoxLayout();
-	//vbox->addLayout( hbox );
-	//hbox->addWidget( brkInstrsExd );
-	//hbox->addWidget( instrExdVal, 1, Qt::AlignLeft );
-	//hbox2->addLayout( vbox );
+	ppuStatHideLbl = new QLabel( tr("Hidden") );
+	ppuStatHideLbl->setVisible(false);
 
-	//validator = new fceuDecIntValidtor( 0, 0x3FFFFFFF, this );
-	//cpuCycExdVal->setFont( font );
-	//cpuCycExdVal->setMaxLength( 16 );
-	//cpuCycExdVal->setValidator( validator );
-	//cpuCycExdVal->setAlignment(Qt::AlignLeft);
-	//cpuCycExdVal->setMaximumWidth( 18 * fontCharWidth );
-	//cpuCycExdVal->setCursorPosition(0);
-	//connect( cpuCycExdVal, SIGNAL(textEdited(const QString &)), this, SLOT(cpuCycleThresChanged(const QString &)));
+	vbox = new QVBoxLayout();
+	vbox->addWidget( ppuStatContainerWidget );
+	vbox->addWidget( ppuStatHideLbl );
 
-	//validator = new fceuDecIntValidtor( 0, 0x3FFFFFFF, this );
-	//instrExdVal->setFont( font );
-	//instrExdVal->setMaxLength( 16 );
-	//instrExdVal->setValidator( validator );
-	//instrExdVal->setAlignment(Qt::AlignLeft);
-	//instrExdVal->setMaximumWidth( 18 * fontCharWidth );
-	//instrExdVal->setCursorPosition(0);
-	//connect( instrExdVal, SIGNAL(textEdited(const QString &)), this, SLOT(instructionsThresChanged(const QString &)));
+	ppuFrame->setLayout( vbox  );
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::buildBpListDisplay(void)
+{
+	QVBoxLayout *vbox;
+	QHBoxLayout *hbox;
+	QPushButton *button;
+	QTreeWidgetItem *item;
+	QFontMetrics fm(font);
 
-	//brkCpuCycExd->setChecked( break_on_cycles );
-	//connect( brkCpuCycExd, SIGNAL(stateChanged(int)), this, SLOT(breakOnCyclesCB(int)) );
+	bpFrame = new QGroupBox(tr("Breakpoints"));
+	vbox    = new QVBoxLayout();
+	bpTree  = new QTreeWidget();
 
-	//brkInstrsExd->setChecked( break_on_instructions );
-	//connect( brkInstrsExd, SIGNAL(stateChanged(int)), this, SLOT(breakOnInstructionsCB(int)) );
+	bpFrame->setVisible(bpTreeDpyVis);
+	bpFrame->setCheckable(true);
+	bpFrame->setChecked(true);
+	connect( bpFrame, SIGNAL(toggled(bool)), this, SLOT(setBpFrameVis(bool)) );
 
-	hbox3     = new QHBoxLayout();
+	bpTree->setColumnCount(2);
+	bpTree->setSelectionMode( QAbstractItemView::SingleSelection );
+	bpTree->setMinimumHeight( 3 * fm.lineSpacing() );
+	bpTree->setSizePolicy( QSizePolicy::Minimum, QSizePolicy::Ignored );
+
+	item = new QTreeWidgetItem();
+	item->setFont( 0, font );
+	item->setFont( 1, font );
+	item->setFont( 2, font );
+	item->setFont( 3, font );
+	item->setText( 0, QString::fromStdString( "Addr" ) );
+	item->setText( 1, QString::fromStdString( "Flags" ) );
+	item->setText( 2, QString::fromStdString( "Cond" ) );
+	item->setText( 3, QString::fromStdString( "Desc" ) );
+	item->setTextAlignment( 0, Qt::AlignCenter);
+	item->setTextAlignment( 1, Qt::AlignCenter);
+	item->setTextAlignment( 2, Qt::AlignCenter);
+	item->setTextAlignment( 3, Qt::AlignCenter);
+
+	bpTree->setHeaderItem( item );
+
+	bpTree->header()->setSectionResizeMode( QHeaderView::ResizeToContents );
+
+	connect( bpTree, SIGNAL(itemClicked(QTreeWidgetItem*, int)),
+			   this, SLOT(bpItemClicked( QTreeWidgetItem*, int)) );
+
+	hbox   = new QHBoxLayout();
+	bpAddBtn = button = new QPushButton( tr("Add") );
+	hbox->addWidget( button );
+	connect( button, SIGNAL(clicked(void)), this, SLOT(add_BP_CB(void)) );
+
+	bpEditBtn = button = new QPushButton( tr("Edit") );
+	hbox->addWidget( button );
+	connect( button, SIGNAL(clicked(void)), this, SLOT(edit_BP_CB(void)) );
+
+	bpDelBtn = button = new QPushButton( tr("Delete") );
+	hbox->addWidget( button );
+	connect( button, SIGNAL(clicked(void)), this, SLOT(delete_BP_CB(void)) );
+
+	bpTreeHideLbl = new QLabel( tr("Hidden") );
+	bpTreeHideLbl->setVisible(false);
+
+	vbox->addWidget( bpTree );
+	vbox->addLayout( hbox   );
+	bpTreeContainerWidget = new QWidget(this);
+	bpTreeContainerWidget->setLayout( vbox );
+	vbox    = new QVBoxLayout();
+	vbox->addWidget( bpTreeContainerWidget );
+	vbox->addWidget( bpTreeHideLbl );
+	bpFrame->setLayout( vbox );
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::buildBmListDisplay(void)
+{
+	QVBoxLayout *vbox;
+	QHBoxLayout *hbox;
+	QPushButton *button;
+	QTreeWidgetItem *item;
+	QFontMetrics fm(font);
+
+	bmTreeContainerWidget = new QWidget(this);
+
 	hbox      = new QHBoxLayout();
 	vbox      = new QVBoxLayout();
 	bmFrame   = new QGroupBox( tr("Address Bookmarks") );
@@ -935,9 +1242,16 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	selBmAddr = new QLineEdit();
 	selBmAddrVal = 0;
 
+	bmFrame->setVisible(bmTreeDpyVis);
+	bmFrame->setCheckable(true);
+	bmFrame->setChecked(true);
+	connect( bmFrame, SIGNAL(toggled(bool)), this, SLOT(setBmFrameVis(bool)) );
+
 	connect( selBmAddr, SIGNAL(textChanged(const QString &)), this, SLOT(selBmAddrChanged(const QString &)));
 
 	bmTree->setColumnCount(2);
+	bmTree->setMinimumHeight( 3 * fm.lineSpacing() );
+	bmTree->setSizePolicy( QSizePolicy::Minimum, QSizePolicy::Ignored );
 
 	item = new QTreeWidgetItem();
 	item->setFont( 0, font );
@@ -957,121 +1271,110 @@ ConsoleDebugger::ConsoleDebugger(QWidget *parent)
 	connect( bmTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*, int)),
 			   this, SLOT(bmItemDoubleClicked( QTreeWidgetItem*, int)) );
 
-	vbox->addWidget( selBmAddr );
+	vbox->addWidget( selBmAddr, 1 );
 
 	button    = new QPushButton( tr("Add") );
-	vbox->addWidget( button );
+	vbox->addWidget( button, 1 );
 	connect( button, SIGNAL(clicked(void)), this, SLOT(add_BM_CB(void)) );
 
 	button    = new QPushButton( tr("Delete") );
-	vbox->addWidget( button );
+	vbox->addWidget( button, 1 );
 	connect( button, SIGNAL(clicked(void)), this, SLOT(delete_BM_CB(void)) );
 
 	button    = new QPushButton( tr("Name") );
-	vbox->addWidget( button );
+	vbox->addWidget( button, 1 );
 	connect( button, SIGNAL(clicked(void)), this, SLOT(edit_BM_CB(void)) );
+
+	vbox->addStretch( 10 );
 
 	hbox->addWidget( bmTree, 10 );
 	hbox->addLayout( vbox  ,  1 );
-	bmFrame->setLayout( hbox );
-	hbox3->addWidget( bmFrame );
-	vbox1->addLayout( hbox3 );
 
-	//frame        = new QFrame();
-	//vbox         = new QVBoxLayout();
-	//button       = new QPushButton( tr("Reset Counters") );
-	//connect( button, SIGNAL(clicked(void)), this, SLOT(resetCountersCB(void)) );
-	//vbox->addWidget( button );
-	//vbox->addWidget( frame  );
-	//hbox3->addLayout( vbox  );
+	bmTreeContainerWidget->setLayout( hbox );
+	bmTreeHideLbl = new QLabel( tr("Hidden") );
 
-	// IDA font is just a monospace font, we are forcing this anyway. It is just easier to read the assembly.
-	// If a different font is desired, my thought is to open a QFontDialog and let the user pick a new font,
-	// rather than use a checkbox that selects between two. But for the moment, I have more important things
-	// to do.
+	bmTreeContainerWidget->setVisible(true);
+	bmTreeHideLbl->setVisible(false);
 
-	setLayout( mainLayoutv );
+	vbox = new QVBoxLayout();
+	vbox->addWidget( bmTreeContainerWidget );
+	vbox->addWidget( bmTreeHideLbl );
 
-	windowUpdateReq   = true;
+	bmFrame->setLayout( vbox );
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::loadDisplayViews(void)
+{
+	bool hasVisibleWidgets = false;
 
-	dbgWin = this;
+	for (int i=0; i<dataDpyVbox1->count(); i++)
+	{
+		dataDpyVbox1->takeAt(i);
+	}
+	for (int i=0; i<dataDpyVbox2->count(); i++)
+	{
+		dataDpyVbox2->takeAt(i);
+	}
 
-	periodicTimer  = new QTimer( this );
+	cpuFrame->setVisible(cpuStatDpyVis);
+	ppuFrame->setVisible(ppuStatDpyVis);
+	 bpFrame->setVisible(bpTreeDpyVis);
+	 bmFrame->setVisible(bmTreeDpyVis);
 
-	connect( periodicTimer, &QTimer::timeout, this, &ConsoleDebugger::updatePeriodic );
-	connect( hbar, SIGNAL(valueChanged(int)), this, SLOT(hbarChanged(int)) );
-	connect( vbar, SIGNAL(valueChanged(int)), this, SLOT(vbarChanged(int)) );
+	cpuStatDpyVbox = cpuStatDpyCol ? dataDpyVbox2 : dataDpyVbox1;
+	ppuStatDpyVbox = ppuStatDpyCol ? dataDpyVbox2 : dataDpyVbox1;
+	bpDataDpyVbox  =  bpTreeDpyCol ? dataDpyVbox2 : dataDpyVbox1;
+	bmDataDpyVbox  =  bmTreeDpyCol ? dataDpyVbox2 : dataDpyVbox1;
 
-	bpListUpdate( false );
+	cpuStatDpyVbox->addWidget( cpuFrame, 10 );
+	ppuStatDpyVbox->addWidget( ppuFrame, 10 );
+	 bpDataDpyVbox->addWidget( bpFrame , 100);
+	 bmDataDpyVbox->addWidget( bmFrame , 100);
 
-	periodicTimer->start( 100 ); // 10hz
+	hasVisibleWidgets = false;
 
-	// If this is the first debug window to open, load breakpoints fresh
-	{ 
-		int autoLoadDebug;
+	for (int i=0; i<dataDpyVbox1->count(); i++)
+	{
+		QWidget *w = dataDpyVbox1->itemAt(i)->widget();
 
-		g_config->getOption( "SDL.AutoLoadDebugFiles", &autoLoadDebug );
-
-		if ( autoLoadDebug )
+		if ( w )
 		{
-			loadGameDebugBreakpoints();
+			if ( w->isVisible() )
+			{
+				hasVisibleWidgets = true;
+			}
 		}
 	}
+	mainLayouth->setStretchFactor( dataDpyVbox1, hasVisibleWidgets ? 40 : 1 );
 
-	restoreGeometry(settings.value("debugger/geometry").toByteArray());
+	hasVisibleWidgets = false;
 
-	setCpuStatusFont( cpuFont );
-
-	   opcodeColorAct->connectColor( &asmView->opcodeColor );
-	  addressColorAct->connectColor( &asmView->addressColor );
-	immediateColorAct->connectColor( &asmView->immediateColor );
-	    labelColorAct->connectColor( &asmView->labelColor  );
-	  commentColorAct->connectColor( &asmView->commentColor);
-	       pcColorAct->connectColor( &asmView->pcBgColor);
-}
-//----------------------------------------------------------------------------
-ConsoleDebugger::~ConsoleDebugger(void)
-{
-	std::list <ConsoleDebugger*>::iterator it;
-
-	//printf("Destroy Debugger Window\n");
-	periodicTimer->stop();
-
-	if ( dbgWin == this )
+	for (int i=0; i<dataDpyVbox2->count(); i++)
 	{
-		dbgWin = NULL;
-	}
+		QWidget *w = dataDpyVbox2->itemAt(i)->widget();
 
-	if ( dbgWin == NULL )
-	{
-		saveGameDebugBreakpoints();
-		debuggerClearAllBreakpoints();
-		debuggerClearAllBookmarks();
-
-		if ( waitingAtBp )
+		if ( w )
 		{
-			FCEUI_SetEmulationPaused(0);
+			if ( w->isVisible() )
+			{
+				hasVisibleWidgets = true;
+			}
 		}
 	}
+	mainLayouth->setStretchFactor( dataDpyVbox2, hasVisibleWidgets ? 40 : 1 );
 }
 //----------------------------------------------------------------------------
-void ConsoleDebugger::closeEvent(QCloseEvent *event)
+void ConsoleDebugger::saveDisplayViews(void)
 {
-	QSettings settings;
-	//printf("Debugger Close Window Event\n");
-	settings.setValue("debugger/geometry", saveGeometry());
-	done(0);
-	deleteLater();
-	event->accept();
-}
-//----------------------------------------------------------------------------
-void ConsoleDebugger::closeWindow(void)
-{
-	QSettings settings;
-	//printf("Close Window\n");
-	settings.setValue("debugger/geometry", saveGeometry());
-	done(0);
-	deleteLater();
+	g_config->setOption( "SDL.DebuggerCpuDpyVis",  cpuStatDpyVis);
+	g_config->setOption( "SDL.DebuggerPpuDpyVis",  ppuStatDpyVis);
+	g_config->setOption( "SDL.DebuggerBpDpyVis" ,   bpTreeDpyVis);
+	g_config->setOption( "SDL.DebuggerBmDpyVis" ,   bmTreeDpyVis);
+	g_config->setOption( "SDL.DebuggerCpuDpyCol", cpuStatDpyCol);
+	g_config->setOption( "SDL.DebuggerPpuDpyCol", ppuStatDpyCol);
+	g_config->setOption( "SDL.DebuggerBpDpyCol" ,  bpTreeDpyCol);
+	g_config->setOption( "SDL.DebuggerBmDpyCol" ,  bmTreeDpyCol);
+	g_config->save();
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::setCpuStatusFont( const QFont &font )
@@ -1686,6 +1989,72 @@ void ConsoleDebugger::bmListUpdate( bool reset )
 	}
 
 	bmTree->viewport()->update();
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::setPpuFrameVis(bool vis)
+{
+	ppuStatContainerWidget->setVisible(vis);
+	ppuStatHideLbl->setVisible(!vis);
+
+	if ( vis )
+	{
+		dataDpyVbox1->setStretchFactor( ppuFrame, 10);
+	}
+	else
+	{
+		dataDpyVbox1->setStretchFactor( ppuFrame,  1);
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::setBpFrameVis(bool vis)
+{
+	bpTreeContainerWidget->setVisible(vis);
+	bpTreeHideLbl->setVisible(!vis);
+
+	if ( vis )
+	{
+		bpDataDpyVbox->setStretchFactor( bpFrame, 100);
+	}
+	else
+	{
+		bpDataDpyVbox->setStretchFactor( bpFrame,   1);
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::setBmFrameVis(bool vis)
+{
+	bmTreeContainerWidget->setVisible(vis);
+	bmTreeHideLbl->setVisible(!vis);
+
+	if ( vis )
+	{
+		bmDataDpyVbox->setStretchFactor( bmFrame, 100);
+	}
+	else
+	{
+		bmDataDpyVbox->setStretchFactor( bmFrame,   1);
+	}
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::resizeToMinimumSizeHint(void) 
+{
+	resize( minimumSizeHint() );
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::setDisplayVisibility( QAction *act, bool *ptr)
+{
+	*ptr = act->isChecked();
+	loadDisplayViews();
+	saveDisplayViews();
+	QTimer::singleShot( 100, Qt::CoarseTimer, this, SLOT(resizeToMinimumSizeHint(void)) );
+}
+//----------------------------------------------------------------------------
+void ConsoleDebugger::setViewDpyCol(int *ptr, int col) 
+{
+	*ptr = col;
+	loadDisplayViews();
+	saveDisplayViews();
+	QTimer::singleShot( 100, Qt::CoarseTimer, this, SLOT(resizeToMinimumSizeHint(void)) );
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::add_BP_CB(void)
@@ -2333,6 +2702,20 @@ void ConsoleDebugger::asmViewCtxMenuRunToCursor(void)
 	fceuWrapperUnLock();
 }
 //----------------------------------------------------------------------------
+void ConsoleDebugger::asmViewCtxMenuGoTo(void)
+{
+	int line;
+
+	line = asmView->getAsmLineFromAddr( asmView->getCtxMenuAddr() );
+
+	asmView->scrollToLine( line );
+
+	if ( asmView->getAsmAddrFromLine(line) == asmView->getCtxMenuAddr() )
+	{
+		asmView->setSelAddrToLine(line);
+	}
+}
+//----------------------------------------------------------------------------
 void ConsoleDebugger::asmViewCtxMenuAddBP(void)
 {
 	int bpNum;
@@ -2517,6 +2900,15 @@ void QAsmView::setBreakpointAtSelectedLine(void)
 		FCEUI_SetEmulationPaused(0);
 		fceuWrapperUnLock();
 	}
+}
+//----------------------------------------------------------------------------
+int  QAsmView::getAsmAddrFromLine(int line)
+{
+	if ( (line >= 0) && (line < asmEntry.size()) )
+	{
+		return asmEntry[line]->addr;
+	}
+	return -1;
 }
 //----------------------------------------------------------------------------
 int  QAsmView::getAsmLineFromAddr(int addr)
@@ -3181,6 +3573,9 @@ void ConsoleDebugger::queueUpdate(void)
 //----------------------------------------------------------------------------
 void ConsoleDebugger::updatePeriodic(void)
 {
+	bool buttonEnable;
+	QTreeWidgetItem *item;
+
 	//printf("Update Periodic\n");
 
 	if ( windowUpdateReq )
@@ -3231,6 +3626,20 @@ void ConsoleDebugger::updatePeriodic(void)
 		//printf("Bookmark Tree Update\n");
 		bmListUpdate( true );
 	}
+
+	item = bpTree->currentItem();
+
+	if ( item == NULL )
+	{
+		buttonEnable = false;
+	}
+	else
+	{
+		buttonEnable = true;
+	}
+	bpAddBtn->setEnabled(true);
+	bpEditBtn->setEnabled(buttonEnable);
+	bpDelBtn->setEnabled(buttonEnable);
 }
 //----------------------------------------------------------------------------
 void ConsoleDebugger::breakPointNotify( int bpNum )
@@ -3880,53 +4289,72 @@ void QAsmView::scrollToPC(void)
 {
 	if ( asmPC != NULL )
 	{
-		int ofs = 0;
-		int maxOfs = (viewLines-3);
+		scrollToLine( asmPC->line );
+	}
+}
+//----------------------------------------------------------------------------
+void QAsmView::scrollToLine( int line )
+{
+	int ofs = 0;
+	int maxOfs = (viewLines-3);
 
-		if ( maxOfs < 0 )
-		{
-			maxOfs = 0;
-		}
+	if ( maxOfs < 0 )
+	{
+		maxOfs = 0;
+	}
 
-		switch ( pcLinePlacement )
-		{
-			default:
-			case 0:
+	switch ( pcLinePlacement )
+	{
+		default:
+		case 0:
+			ofs = 0;
+		break;
+		case 1:
+			ofs = (viewLines / 4);
+		break;
+		case 2:
+			ofs = (viewLines / 2);
+		break;
+		case 3:
+			ofs = (viewLines*3) / 4;
+		break;
+		case 4:
+			ofs =  maxOfs;
+		break;
+		case 5:
+			ofs = pcLineOffset;
+
+			if ( ofs < 0 )
+			{
 				ofs = 0;
-			break;
-			case 1:
-				ofs = (viewLines / 4);
-			break;
-			case 2:
-				ofs = (viewLines / 2);
-			break;
-			case 3:
-				ofs = (viewLines*3) / 4;
-			break;
-			case 4:
-				ofs =  maxOfs;
-			break;
-			case 5:
-				ofs = pcLineOffset;
+			}
+			else if ( ofs > maxOfs )
+			{
+				ofs = maxOfs;
+			}
+		break;
+	}
 
-				if ( ofs < 0 )
-				{
-					ofs = 0;
-				}
-				else if ( ofs > maxOfs )
-				{
-					ofs = maxOfs;
-				}
-			break;
-		}
+	lineOffset = line - ofs;
 
-		lineOffset = asmPC->line - ofs;
-
-		if ( lineOffset < 0 )
-		{
-			lineOffset = 0;
-		}
-		vbar->setValue( lineOffset );
+	if ( lineOffset < 0 )
+	{
+		lineOffset = 0;
+	}
+	vbar->setValue( lineOffset );
+}
+//----------------------------------------------------------------------------
+void QAsmView::setSelAddrToLine( int line )
+{
+	if ( (line >= 0) && (line < asmEntry.size()) )
+	{
+		int addr = asmEntry[line]->addr;
+		selAddrLine  = line;
+		selAddrChar  = pcLocLinePos + 3;
+		selAddrWidth = 4;
+		selAddrValue = addr;
+		sprintf( selAddrText, "%04X", addr );
+		printf("Set Select ADDR:%04X\n", addr);
 	}
 }
 //----------------------------------------------------------------------------
@@ -4004,6 +4432,8 @@ void QAsmView::calcFontData(void)
 	pxLineLead     = pxLineSpacing - metrics.height();
 	pxCursorHeight = metrics.height();
 
+	printf("W:%i  H:%i  LS:%i  \n", pxCharWidth, pxCharHeight, pxLineSpacing );
+
 	viewLines   = (viewHeight / pxLineSpacing) + 1;
 
 	calcMinimumWidth();
@@ -4030,9 +4460,11 @@ bool QAsmView::event(QEvent *event)
 {
 	if (event->type() == QEvent::ToolTip)
 	{
-		int line;
+		int i,j, line, addr = 0;
 		QHelpEvent *helpEvent = static_cast<QHelpEvent *>(event);
 		bool opcodeValid = false, showOpcodeDesc = false, showSymHexDecode = false;
+		bool showAddrDesc = false, showOperandAddrDesc = false;
+		char stmp[256];
 
 		QPoint c = convPixToCursor(helpEvent->pos());
 
@@ -4042,6 +4474,8 @@ bool QAsmView::event(QEvent *event)
 				(asmEntry[line]->type == dbg_asm_entry_t::ASM_TEXT);
 
 		showOpcodeDesc = (c.x() >= opcodeLinePos) && (c.x() < operandLinePos) && opcodeValid;
+
+		showAddrDesc = (c.x() >= pcLocLinePos) && (c.x() < byteCodeLinePos) && opcodeValid;
 
 		if ( (c.x() > operandLinePos) && opcodeValid && (asmEntry[line]->sym.name.size() > 0) )
 		{
@@ -4060,6 +4494,52 @@ bool QAsmView::event(QEvent *event)
 			}
 		}
 
+		if ( opcodeValid && (c.x() > operandLinePos) &&
+				(c.x() < asmEntry[line]->text.size()) )
+		{
+			i = c.x();
+
+			if ( isxdigit( asmEntry[line]->text[i] ) )
+			{
+				int addrClicked = 1;
+				int addrTextLoc = i;
+
+				while ( isxdigit( asmEntry[line]->text[i] ) )
+				{
+					addrTextLoc = i;
+					i--;
+				}
+				if ( asmEntry[line]->text[i] == '$' || asmEntry[line]->text[i] == ':' )
+				{
+					i--;
+				}
+				else
+				{
+					addrClicked = 0;
+				}
+				if ( asmEntry[line]->text[i] == '#' )
+				{
+					addrClicked = 0;
+				}
+				if ( addrClicked )
+				{
+					j=0; i = addrTextLoc;
+					
+					while ( isxdigit( asmEntry[line]->text[i] ) )
+					{
+						stmp[j] = asmEntry[line]->text[i]; i++; j++;
+					}
+					stmp[j] = 0;
+
+					//printf("Addr: '%s'\n", stmp );
+
+					addr = strtol( stmp, NULL, 16 );
+
+					showOperandAddrDesc = true;
+				}
+			}
+		}
+
 		if ( showOpcodeDesc )
 		{
 			QString qs = fceuGetOpcodeToolTip(asmEntry[line]->opcode, asmEntry[line]->size );
@@ -4069,9 +4549,43 @@ bool QAsmView::event(QEvent *event)
 		}
 		else if ( showSymHexDecode )
 		{
-			char stmp[64];
-
 			sprintf( stmp, "$%04X", asmEntry[line]->sym.ofs );
+
+			QToolTip::showText(helpEvent->globalPos(), tr(stmp), this );
+		}
+		else if ( showAddrDesc )
+		{
+			if ( asmEntry[line]->bank < 0 )
+			{
+				sprintf( stmp, "ADDR:\t$%04X", asmEntry[line]->addr );
+			}
+			else
+			{
+				sprintf( stmp, "ADDR:\t$%04X\nBANK:\t$%02X\nROM:\t$%06X", 
+					asmEntry[line]->addr, asmEntry[line]->bank, asmEntry[line]->rom );
+			}
+
+			QToolTip::showText(helpEvent->globalPos(), tr(stmp), this );
+		}
+		else if ( showOperandAddrDesc )
+		{
+			int bank = -1, romOfs = -1;
+
+			if (addr >= 0x8000)
+			{
+				bank   = getBank(addr);
+				romOfs = GetNesFileAddress(addr);
+			}
+
+			if ( bank < 0 )
+			{
+				sprintf( stmp, "ADDR:\t$%04X", addr );
+			}
+			else
+			{
+				sprintf( stmp, "ADDR:\t$%04X\nBANK:\t$%02X\nROM:\t$%06X", 
+					addr, bank, romOfs );
+			}
 
 			QToolTip::showText(helpEvent->globalPos(), tr(stmp), this );
 		}
@@ -4425,10 +4939,41 @@ void QAsmView::mouseReleaseEvent(QMouseEvent * event)
 	if ( event->button() == Qt::LeftButton )
 	{
 		//printf("Left Button Release: (%i,%i)\n", c.x(), c.y() );
-		mouseLeftBtnDown = false;
-		setHighlightEndCoord( c.x(), line );
 
-		loadHighlightToClipboard();
+		if ( mouseLeftBtnDown )
+		{
+			mouseLeftBtnDown = false;
+			setHighlightEndCoord( c.x(), line );
+
+			loadHighlightToClipboard();
+		}
+	}
+}
+//----------------------------------------------------------------------------
+void QAsmView::mouseDoubleClickEvent(QMouseEvent * event)
+{
+	//printf("Double Click\n");
+
+	if ( selAddrValue >= 0 )
+	{
+		int line;
+
+		line = getAsmLineFromAddr(selAddrValue);
+
+		scrollToLine( line );
+
+		if ( getAsmAddrFromLine(line) == selAddrValue )
+		{
+			setSelAddrToLine(line);
+		}
+
+		mouseLeftBtnDown = false;
+		txtHlgtAnchorLine = -1;
+		txtHlgtAnchorChar = -1;
+		txtHlgtStartChar  = -1;
+		txtHlgtStartLine  = -1;
+		txtHlgtEndChar    = -1;
+		txtHlgtEndLine    = -1;
 	}
 }
 //----------------------------------------------------------------------------
@@ -4477,7 +5022,6 @@ void QAsmView::mousePressEvent(QMouseEvent * event)
 		{
 			if ( selChar < (int)asmEntry[line]->text.size() )
 			{
-
 				i = selChar;
 
 				if ( asmEntry[line]->sym.name.size() > 0 )
@@ -4554,22 +5098,21 @@ void QAsmView::mousePressEvent(QMouseEvent * event)
 		else if ( asmEntry[line]->type == dbg_asm_entry_t::SYMBOL_NAME )
 		{
 			selAddrLine  = line;
-			selAddrChar  = 0;
+			selAddrChar  = 3;
 			selAddrValue = addr = asmEntry[line]->addr;
 
-			if ( asmEntry[line]->text.size() > 0 )
+			i=selAddrChar; j=0;
+			while ( asmEntry[line]->text[i] != 0 )
 			{
-				selAddrWidth = asmEntry[line]->text.size()-1;
+				if ( j >= (int)sizeof(selAddrText) )
+				{
+					j=sizeof(selAddrText)-1;
+					break;
+				}
+				selAddrText[j] = asmEntry[line]->text[i]; i++; j++;
 			}
-			else
-			{
-				selAddrWidth = 0;
-			}
-			if ( selAddrWidth >= (int)sizeof(selAddrText) )
-			{
-				selAddrWidth = sizeof(selAddrText)-1;
-			}
-			strncpy( selAddrText, asmEntry[line]->text.c_str(), selAddrWidth );
+			selAddrText[j] = 0;
+			selAddrWidth = j-1;
 			selAddrText[ selAddrWidth ] = 0;
 		}
 
@@ -4577,7 +5120,7 @@ void QAsmView::mousePressEvent(QMouseEvent * event)
 		{
 			addr = asmEntry[line]->addr;
 			selAddrLine  = line;
-			selAddrChar  = 4;
+			selAddrChar  = pcLocLinePos+3;
 			selAddrWidth = 4;
 			selAddrValue = addr;
 			sprintf( selAddrText, "%04X", addr );
@@ -4651,6 +5194,7 @@ void QAsmView::contextMenuEvent(QContextMenuEvent *event)
 	QMenu menu(this);
 	QPoint c = convPixToCursor( event->pos() );
 	bool enableRunToCursor = false;
+	char stmp[128];
 
 	line = lineOffset + c.y();
 
@@ -4680,6 +5224,12 @@ void QAsmView::contextMenuEvent(QContextMenuEvent *event)
 			//act->setShortcut( QKeySequence(tr("Ctrl+F10")));
 			connect( act, SIGNAL(triggered(void)), parent, SLOT(asmViewCtxMenuRunToCursor(void)) );
 		}
+
+		sprintf( stmp, "Go to $%04X\tDouble+Click", ctxMenuAddr );
+		act = new QAction(tr(stmp), &menu);
+		menu.addAction(act);
+		//act->setShortcut( QKeySequence(tr("Ctrl+F10")));
+		connect( act, SIGNAL(triggered(void)), parent, SLOT(asmViewCtxMenuGoTo(void)) );
 
 		if ( isBreakpointAtAddr( addr ) >= 0 )
 		{
@@ -4721,7 +5271,13 @@ void QAsmView::drawPointerPC( QPainter *painter, int xl, int yl )
 	b2 = 2*b;
 
 	w =  pxCharWidth;
+
 	h = (pxCharHeight / 4);
+
+	if ( h < 1 )
+	{
+		h = 1;
+	}
 
 	x = xl + (pxCharWidth*2);
 	y = yl -  pxCharHeight + (pxCharHeight - h - b2)/2;
@@ -4733,7 +5289,7 @@ void QAsmView::drawPointerPC( QPainter *painter, int xl, int yl )
 
 	p[0] = QPoint( x, y );
 	p[1] = QPoint( x, y-pxCharHeight );
-	p[2] = QPoint( x+pxCharWidth, y-(pxCharHeight/2) );
+	p[2] = QPoint( x+pxCharWidth-1, y-(pxCharHeight/2) );
 
 	painter->setBrush(Qt::red);
 
@@ -4904,7 +5460,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 {
 	int x,y,l, row, nrow, selAddr;
 	int cd_boundary, asm_start_boundary;
-	int pxCharWidth2, vOffset;
+	int pxCharWidth2, vOffset, vlineOffset;
 	QPainter painter(this);
 	QColor white("white"), black("black"), blue("blue");
 	QColor hlgtFG("white"), hlgtBG("blue");
@@ -4948,6 +5504,8 @@ void QAsmView::paintEvent(QPaintEvent *event)
 	cd_boundary = (int)(2.5*pxCharWidth) - pxLineXScroll;
 	asm_start_boundary = cd_boundary + (10*pxCharWidth);
 	//asm_stop_boundary  = asm_start_boundary + (9*pxCharWidth);
+	
+	vlineOffset = -pxLineSpacing + (pxLineSpacing - pxCharHeight)/2;
 
 	painter.fillRect( 0, 0, viewWidth, viewHeight, this->palette().color(QPalette::Window) );
 	painter.fillRect( 0, 0, cd_boundary, viewHeight, this->palette().color(QPalette::Mid) );
@@ -4972,7 +5530,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 		{
 			if ( l == asmPC->line )
 			{
-				painter.fillRect( cd_boundary, y - pxLineSpacing + pxLineLead, viewWidth, pxLineSpacing, pcBgColor );
+				painter.fillRect( cd_boundary, y + vlineOffset, viewWidth, pxLineSpacing, pcBgColor );
 				forceDarkColor = true;
 				lineIsPC = true;
 			}
@@ -5025,7 +5583,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 
 					ax = x + selAddrChar*pxCharWidth;
 
-					painter.fillRect( ax, y - pxLineSpacing + pxLineLead, selAddrWidth*pxCharWidth, pxLineSpacing, blue );
+					painter.fillRect( ax, y + vlineOffset, selAddrWidth*pxCharWidth, pxLineSpacing, blue );
 
 					painter.setPen( white );
 
@@ -5080,7 +5638,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 
 				ax = x + (hlgtXs * pxCharWidth);
 
-				painter.fillRect( ax, y - pxLineSpacing + pxLineLead, hlgtXd * pxCharWidth, pxLineSpacing, hlgtBG );
+				painter.fillRect( ax, y + vlineOffset, hlgtXd * pxCharWidth, pxLineSpacing, hlgtBG );
 
 				drawText( &painter, ax, y, s.c_str() );
 			}
@@ -5130,7 +5688,7 @@ void QAsmView::paintEvent(QPaintEvent *event)
 
 			if ( asmEntry[l]->bpNum >= 0 )
 			{
-				painter.drawEllipse( cd_boundary - pxCharWidth2, y - pxLineSpacing + pxLineLead + vOffset, pxCharWidth, pxCharWidth );
+				painter.drawEllipse( cd_boundary - pxCharWidth2, y + vlineOffset + vOffset, pxCharWidth, pxCharWidth );
 			}
 		}
 
