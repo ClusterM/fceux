@@ -22,6 +22,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <QWindow>
+#include <QScreen>
+#include <QToolTip>
+#include <QApplication>
+
 #if WIN32
 #include <Windows.h>
 #include <direct.h>
@@ -303,6 +308,186 @@ int fceuLoadConfigColor( const char *confName, QColor *color )
 		color->setNamedColor( colorString.c_str() );
 	}
 	return 0;
+}
+//---------------------------------------------------------------------------
+// FCEU Custom Tool Tip Helper Functions
+//---------------------------------------------------------------------------
+QDialog *fceuCustomToolTipShow( QHelpEvent *helpEvent, QDialog *popup )
+{
+	int xo = 32, yo = 32;
+	QPoint pos;
+	QScreen *scr = NULL;
+	QWidget *parent = static_cast<QWidget*>(popup->parent());
+
+	if ( parent != NULL )
+	{
+		if ( parent->window() )
+		{
+			if ( parent->window()->windowHandle() )
+			{
+				scr = parent->window()->windowHandle()->screen();
+			}
+		}
+	}
+
+	popup->show();
+
+	pos.setX( helpEvent->globalPos().x() + xo );
+	pos.setY( helpEvent->globalPos().y() + yo );
+
+	if ( scr )
+	{
+
+		if ( ( (pos.x() + popup->width()) > scr->virtualSize().width() ) )
+		{
+			pos.setX( helpEvent->globalPos().x() - popup->width() - xo );
+		}
+		if ( ( (pos.y() + popup->height()) > scr->virtualSize().height() ) )
+		{
+			pos.setY( helpEvent->globalPos().y() - popup->height() - yo );
+		}
+		popup->move( pos );
+	}
+	else
+	{
+		popup->move( pos );
+	}
+	return popup;
+}
+//---------------------------------------------------------------------------
+fceuCustomToolTip *fceuCustomToolTip::instance = 0;
+//---------------------------------------------------------------------------
+fceuCustomToolTip::fceuCustomToolTip( QWidget *parent )
+	: QDialog( parent, Qt::ToolTip )
+{
+	w = parent;
+
+	if ( instance )
+	{
+		instance->done(0);
+		instance->deleteLater();
+		instance = 0;
+	}
+	instance = this;
+
+	qApp->installEventFilter(this);
+	setForegroundRole( QPalette::ToolTipText );
+	setBackgroundRole( QPalette::ToolTipBase );
+	setPalette( QToolTip::palette() );
+
+	setMouseTracking(true);
+
+	//printf("Create Tool Tip\n");
+
+	hideTimer = new QTimer( this );
+	hideTimer->setSingleShot(true);
+
+	connect( hideTimer, &QTimer::timeout, this, &fceuCustomToolTip::hideTimerExpired );
+}
+//---------------------------------------------------------------------------
+fceuCustomToolTip::~fceuCustomToolTip( void )
+{
+	//printf("Destroy Tool Tip\n");
+	if ( instance == this )
+	{
+		instance = 0;
+	}
+}
+//---------------------------------------------------------------------------
+void fceuCustomToolTip::hideTip(void)
+{
+	if ( !hideTimer->isActive() )
+	{
+		hideTimer->start( 300 );
+	}
+}
+//---------------------------------------------------------------------------
+void fceuCustomToolTip::hideTipImmediately(void)
+{
+	close();
+	deleteLater();
+}
+//---------------------------------------------------------------------------
+void fceuCustomToolTip::hideTimerExpired(void)
+{
+	//printf("Hide Timer Expired:\n");
+	hideTipImmediately();
+}
+//---------------------------------------------------------------------------
+bool fceuCustomToolTip::eventFilter( QObject *obj, QEvent *event)
+{
+	//printf("Event:%i   %p\n", event->type(), obj);
+	switch (event->type() )
+	{
+		case QEvent::Leave:
+
+			//if ( obj == w )
+			//{
+			//	printf("Left parent\n");
+			//}
+			hideTip();
+			break;
+		case QEvent::Enter:
+
+			if ( obj == w )
+			{
+				if ( hideTimer->isActive() )
+				{
+					hideTimer->stop();
+				}
+				//printf("Enter parent\n");
+			}
+			break;
+		
+		case QEvent::WindowActivate:
+		case QEvent::WindowDeactivate:
+		case QEvent::FocusIn:
+		case QEvent::FocusOut:
+			if ( obj != this )
+			{
+				hideTipImmediately();
+			}
+			break;
+		case QEvent::Close:
+		case QEvent::MouseButtonPress:
+		case QEvent::MouseButtonRelease:
+		case QEvent::MouseButtonDblClick:
+			hideTipImmediately();
+			break;
+
+		case QEvent::MouseMove:
+		{
+			if ( (obj == w) && !rect().isNull() && 
+					!rect().contains(static_cast<QMouseEvent*>(event)->pos()))
+			{
+				hideTip();
+			}
+			break;
+		}
+		default:
+			break;
+	}
+	return false;
+}
+//---------------------------------------------------------------------------
+void fceuCustomToolTip::mouseMoveEvent(QMouseEvent *event)
+{
+	//printf("QEvent::MouseMove\n");
+
+	if (!w->rect().isNull()) 
+	{
+		QPoint pos = event->globalPos();
+		pos = mapFromGlobal(pos);
+
+		//printf("QEvent::MouseMove:  (%i,%i)   (%i,%i)\n", 
+		//		event->globalPos().x(), event->globalPos().y(), pos.x(), pos.y() );
+
+		if (!w->rect().contains(pos))
+		{
+			done(0);
+			deleteLater();
+		}
+	}
 }
 //---------------------------------------------------------------------------
 // FCEU Data Entry Custom Validators

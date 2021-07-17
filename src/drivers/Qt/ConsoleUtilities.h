@@ -3,7 +3,10 @@
 #pragma once
 
 #include <QColor>
+#include <QTimer>
 #include <QValidator>
+#include <QDialog>
+#include <QHelpEvent>
 
 int  getDirFromFile( const char *path, char *dir );
 
@@ -32,8 +35,8 @@ class fceuDecIntValidtor : public QValidator
 
 class fceuHexIntValidtor : public QValidator
 { 
-   public:
-   	fceuHexIntValidtor( int min, int max, QObject *parent);
+	public:
+		fceuHexIntValidtor( int min, int max, QObject *parent);
 
 		QValidator::State validate(QString &input, int &pos) const;
 
@@ -43,4 +46,28 @@ class fceuHexIntValidtor : public QValidator
 		int  max;
 };
 
+class fceuCustomToolTip : public QDialog
+{
+	public:
+		fceuCustomToolTip( QWidget *parent = nullptr );
+		~fceuCustomToolTip( void );
+
+	protected:
+		bool eventFilter(QObject *obj, QEvent *event) override;
+		void mouseMoveEvent( QMouseEvent *event ) override;
+
+		void hideTip(void);
+		void hideTipImmediately(void);
+	private:
+		QWidget *w;
+		QTimer  *hideTimer;
+
+		static fceuCustomToolTip *instance;
+
+	private slots:
+		void  hideTimerExpired(void);
+};
+
 QString fceuGetOpcodeToolTip( uint8_t *opcode, int size );
+
+QDialog *fceuCustomToolTipShow( QHelpEvent *helpEvent, QDialog *popup );

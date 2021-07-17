@@ -24,11 +24,17 @@
 #include <QPlainTextEdit>
 #include <QClipboard>
 #include <QScrollBar>
+#include <QTabBar>
+#include <QTabWidget>
+#include <QSplitter>
 #include <QToolBar>
 #include <QMenuBar>
+#include <QDropEvent>
+#include <QDragEnterEvent>
 
 #include "Qt/main.h"
 #include "Qt/SymbolicDebug.h"
+#include "Qt/ConsoleUtilities.h"
 #include "Qt/ColorMenu.h"
 #include "../../debug.h"
 
@@ -273,6 +279,76 @@ class DebuggerStackDisplay : public QPlainTextEdit
 		void sel4BytesPerLine(void);
 };
 
+class ppuRegPopup : public fceuCustomToolTip
+{
+   Q_OBJECT
+	public:
+	   ppuRegPopup( QWidget *parent = nullptr );
+	   ~ppuRegPopup(void);
+
+	private:
+};
+
+class ppuCtrlRegDpy : public QLineEdit
+{
+   Q_OBJECT
+
+	public:
+	   ppuCtrlRegDpy( QWidget *parent = nullptr );
+	   ~ppuCtrlRegDpy(void);
+
+	protected:
+		bool event(QEvent *event) override;
+
+	private:
+		ppuRegPopup  *popup;
+
+	public slots:
+};
+
+class DebuggerTabBar : public QTabBar
+{
+	Q_OBJECT
+
+	public:
+		DebuggerTabBar( QWidget *parent = nullptr );
+		~DebuggerTabBar( void );
+
+	public slots:
+
+	signals:
+		void beginDragOut(int);
+	protected:
+		void mousePressEvent(QMouseEvent * event);
+		void mouseReleaseEvent(QMouseEvent * event);
+		void mouseMoveEvent(QMouseEvent * event);
+		//void dragEnterEvent(QDragEnterEvent *event);
+		//void dropEvent(QDropEvent *event);
+	private:
+		bool theDragPress;
+		bool theDragOut;
+
+	private slots:
+};
+
+class DebuggerTabWidget : public QTabWidget
+{
+   Q_OBJECT
+
+	public:
+		DebuggerTabWidget( QWidget *parent = nullptr );
+		~DebuggerTabWidget( void );
+
+		void popPage(QWidget *page);
+		bool indexValid(int idx);
+	protected:
+		void mouseMoveEvent(QMouseEvent * event);
+		void dragEnterEvent(QDragEnterEvent *event);
+		void dropEvent(QDropEvent *event);
+	private:
+		DebuggerTabBar  *bar;
+};
+
 class ConsoleDebugger : public QDialog
 {
    Q_OBJECT
@@ -316,12 +392,14 @@ class ConsoleDebugger : public QDialog
 		QLineEdit *selBmAddr;
 		QLineEdit *cpuCyclesVal;
 		QLineEdit *cpuInstrsVal;
-		QGroupBox *cpuFrame;
-		QGroupBox *ppuFrame;
+		QLineEdit *ppuBgAddr;
+		QLineEdit *ppuSprAddr;
+		QFrame    *cpuFrame;
+		QFrame    *ppuFrame;
 		QGroupBox *stackFrame;
-		QGroupBox *bpFrame;
+		QFrame    *bpFrame;
 		QGroupBox *sfFrame;
-		QGroupBox *bmFrame;
+		QFrame    *bmFrame;
 		QTreeWidget *bpTree;
 		QTreeWidget *bmTree;
 		QPushButton *bpAddBtn;
@@ -335,8 +413,24 @@ class ConsoleDebugger : public QDialog
 		QCheckBox *I_chkbox;
 		QCheckBox *Z_chkbox;
 		QCheckBox *C_chkbox;
-		//QCheckBox *brkCpuCycExd;
-		//QCheckBox *brkInstrsExd;
+
+		QCheckBox *bgEnabled_cbox;
+		QCheckBox *sprites_cbox;
+		QCheckBox *drawLeftBg_cbox;
+		QCheckBox *drawLeftFg_cbox;
+		QCheckBox *vwrite_cbox;
+		QCheckBox *nmiBlank_cbox;
+		QCheckBox *sprite8x16_cbox;
+		QCheckBox *grayscale_cbox;
+		QCheckBox *iRed_cbox;
+		QCheckBox *iGrn_cbox;
+		QCheckBox *iBlu_cbox;
+
+		DebuggerTabWidget *tabView11;
+		DebuggerTabWidget *tabView12;
+		DebuggerTabWidget *tabView21;
+		DebuggerTabWidget *tabView22;
+		QWidget   *asmViewContainerWidget;
 		QWidget   *bpTreeContainerWidget;
 		QWidget   *bmTreeContainerWidget;
 		QWidget   *ppuStatContainerWidget;
@@ -346,24 +440,16 @@ class ConsoleDebugger : public QDialog
 		QLabel    *scanLineLbl;
 		QLabel    *pixLbl;
 		QLabel    *cpuCyclesLbl1;
-		//QLabel    *cpuCyclesLbl2;
 		QLabel    *cpuInstrsLbl1;
-		//QLabel    *cpuInstrsLbl2;
-		QLabel    *bpTreeHideLbl;
-		QLabel    *bmTreeHideLbl;
-		QLabel    *ppuStatHideLbl;
+		//QLabel    *bpTreeHideLbl;
+		//QLabel    *bmTreeHideLbl;
 		QTimer    *periodicTimer;
 		QFont      font;
 
 		QVBoxLayout   *mainLayoutv;
-		QHBoxLayout   *mainLayouth;
+		QSplitter     *mainLayouth;
+		QSplitter     *vsplitter[2];
 		QVBoxLayout   *asmDpyVbox;
-		QVBoxLayout   *dataDpyVbox1;
-		QVBoxLayout   *dataDpyVbox2;
-		QVBoxLayout   *cpuStatDpyVbox;
-		QVBoxLayout   *ppuStatDpyVbox;
-		QVBoxLayout   *bpDataDpyVbox;
-		QVBoxLayout   *bmDataDpyVbox;
 
 		ColorMenuItem *opcodeColorAct;
 		ColorMenuItem *addressColorAct;
@@ -388,6 +474,7 @@ class ConsoleDebugger : public QDialog
 		void setRegsFromEntry(void);
 		void bpListUpdate( bool reset = false );
 		void bmListUpdate( bool reset = false );
+		void buildAsmViewDisplay(void);
 		void buildCpuListDisplay(void);
 		void buildPpuListDisplay(void);
 		void buildBpListDisplay(void);
