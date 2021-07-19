@@ -1084,9 +1084,10 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	QMenuBar *menuBar;
 	QMenu *fileMenu, *editMenu, *viewMenu, *colorMenu, *subMenu;
 	QAction *saveROM, *closeAct;
-	QAction *act, *actHlgt, *actHlgtRV, *actColorFG, *actColorBG;
+	QAction *act, *actHlgt, *actHlgtRV;
+	ColorMenuItem *actColorFG, *actColorBG, *actRowColColor, *actAltColColor;
 	QActionGroup *group;
-	int useNativeMenuBar;
+	int opt, useNativeMenuBar, refreshRateOpt;
 	QSettings settings;
 
 	QDialog::setWindowTitle( tr("Hex Editor") );
@@ -1094,6 +1095,11 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	resize( 512, 512 );
 
 	menuBar = new QMenuBar(this);
+
+	grid   = new QGridLayout(this);
+	editor = new QHexEdit(this);
+	vbar   = new QScrollBar( Qt::Vertical, this );
+	hbar   = new QScrollBar( Qt::Horizontal, this );
 
 	// This is needed for menu bar to show up on MacOS
 	g_config->getOption( "SDL.UseNativeMenuBar", &useNativeMenuBar );
@@ -1261,9 +1267,12 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 
 	group->setExclusive(true);
 
+	g_config->getOption("SDL.HexEditRefreshRate", &refreshRateOpt);
+
 	// View -> Refresh Rate -> 5 Hz
 	act = new QAction(tr("5 Hz"), this);
 	act->setCheckable(true);
+	act->setChecked( refreshRateOpt == 5 );
 	connect(act, SIGNAL(triggered()), this, SLOT(setViewRefresh5Hz(void)) );
 
 	group->addAction(act);
@@ -1272,7 +1281,7 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	// View -> Refresh Rate -> 10 Hz
 	act = new QAction(tr("10 Hz"), this);
 	act->setCheckable(true);
-	act->setChecked(true);
+	act->setChecked( refreshRateOpt == 10 );
 	connect(act, SIGNAL(triggered()), this, SLOT(setViewRefresh10Hz(void)) );
 
 	group->addAction(act);
@@ -1281,6 +1290,7 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	// View -> Refresh Rate -> 20 Hz
 	act = new QAction(tr("20 Hz"), this);
 	act->setCheckable(true);
+	act->setChecked( refreshRateOpt == 20 );
 	connect(act, SIGNAL(triggered()), this, SLOT(setViewRefresh20Hz(void)) );
 
 	group->addAction(act);
@@ -1289,6 +1299,7 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	// View -> Refresh Rate -> 30 Hz
 	act = new QAction(tr("30 Hz"), this);
 	act->setCheckable(true);
+	act->setChecked( refreshRateOpt == 30 );
 	connect(act, SIGNAL(triggered()), this, SLOT(setViewRefresh30Hz(void)) );
 
 	group->addAction(act);
@@ -1297,6 +1308,7 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	// View -> Refresh Rate -> 60 Hz
 	act = new QAction(tr("60 Hz"), this);
 	act->setCheckable(true);
+	act->setChecked( refreshRateOpt == 60 );
 	connect(act, SIGNAL(triggered()), this, SLOT(setViewRefresh60Hz(void)) );
 
 	group->addAction(act);
@@ -1306,76 +1318,94 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	colorMenu = menuBar->addMenu(tr("&Color"));
 
 	// Color -> Highlight Activity
+	g_config->getOption("SDL.HexEditActivityHlgt", &opt);
+	editor->setHighlightActivity( opt );
+
 	actHlgt = new QAction(tr("Highlight &Activity"), this);
 	//actHlgt->setShortcuts(QKeySequence::Open);
 	actHlgt->setStatusTip(tr("Highlight Activity"));
 	actHlgt->setCheckable(true);
-	actHlgt->setChecked(true);
+	actHlgt->setChecked(opt);
 	connect(actHlgt, SIGNAL(triggered(bool)), this, SLOT(actvHighlightCB(bool)) );
 
 	colorMenu->addAction(actHlgt);
 
 	// Color -> Highlight Reverse Video
+	g_config->getOption("SDL.HexEditReverseVideo", &opt);
+	editor->setHighlightReverseVideo( opt );
+
 	actHlgtRV = new QAction(tr("Highlight &Reverse Video"), this);
 	//actHlgtRV->setShortcuts(QKeySequence::Open);
 	actHlgtRV->setStatusTip(tr("Highlight Reverse Video"));
 	actHlgtRV->setCheckable(true);
-	actHlgtRV->setChecked(true);
+	actHlgtRV->setChecked(opt);
 	connect(actHlgtRV, SIGNAL(triggered(bool)), this, SLOT(actvHighlightRVCB(bool)) );
 
 	colorMenu->addAction(actHlgtRV);
 
 	// Color -> Highlight Reverse Video
+	g_config->getOption("SDL.HexEditRowColumnHlgt", &opt);
+	editor->setRowColHlgtEna( opt );
+
 	rolColHlgtAct = new QAction(tr("Highlight &Cursor Row/Column"), this);
 	//rolColHlgtAct->setShortcuts(QKeySequence::Open);
 	rolColHlgtAct->setStatusTip(tr("Highlight Cursor Row/Column"));
 	rolColHlgtAct->setCheckable(true);
-	rolColHlgtAct->setChecked(false);
+	rolColHlgtAct->setChecked(opt);
 	connect(rolColHlgtAct, SIGNAL(triggered(bool)), this, SLOT(rolColHlgtChanged(bool)) );
 
 	colorMenu->addAction(rolColHlgtAct);
 
 	// Color -> Highlight Reverse Video
+	g_config->getOption("SDL.HexEditAltnColumnColor", &opt);
+	editor->setAltColHlgtEna( opt );
+
 	altColHlgtAct = new QAction(tr("&Alternating Column Colors"), this);
 	//altColHlgtAct->setShortcuts(QKeySequence::Open);
 	altColHlgtAct->setStatusTip(tr("&Alternating Column Colors"));
 	altColHlgtAct->setCheckable(true);
-	altColHlgtAct->setChecked(false);
+	altColHlgtAct->setChecked(opt);
 	connect(altColHlgtAct, SIGNAL(triggered(bool)), this, SLOT(altColHlgtChanged(bool)) );
 
 	colorMenu->addAction(altColHlgtAct);
 
+	colorMenu->addSeparator();
+
 	// Color -> ForeGround Color
-	actColorFG = new QAction(tr("&ForeGround Color"), this);
+	actColorFG = new ColorMenuItem( tr("&ForeGround Color"), "SDL.HexEditFgColor", this);
+	//actColorFG = new QAction(tr("&ForeGround Color"), this);
 	//actColorFG->setShortcuts(QKeySequence::Open);
-	actColorFG->setStatusTip(tr("ForeGround Color"));
-	connect(actColorFG, SIGNAL(triggered(void)), this, SLOT(pickForeGroundColor(void)) );
+	//actColorFG->setStatusTip(tr("ForeGround Color"));
+	//connect(actColorFG, SIGNAL(triggered(void)), this, SLOT(pickForeGroundColor(void)) );
 	
 	colorMenu->addAction(actColorFG);
 
 	// Color -> BackGround Color
-	actColorBG = new QAction(tr("&BackGround Color"), this);
+	actColorBG = new ColorMenuItem( tr("&BackGround Color"), "SDL.HexEditBgColor", this);
+	//actColorBG = new QAction(tr("&BackGround Color"), this);
 	//actColorBG->setShortcuts(QKeySequence::Open);
-	actColorBG->setStatusTip(tr("BackGround Color"));
-	connect(actColorBG, SIGNAL(triggered(void)), this, SLOT(pickBackGroundColor(void)) );
+	//actColorBG->setStatusTip(tr("BackGround Color"));
+	//connect(actColorBG, SIGNAL(triggered(void)), this, SLOT(pickBackGroundColor(void)) );
 	
 	colorMenu->addAction(actColorBG);
 
 	// Color -> Cursor Row/Column Color
-	act = new QAction(tr("&Cursor Row/Column Color"), this);
+	actRowColColor = new ColorMenuItem( tr("&Cursor Row/Column Color"), "SDL.HexEditCursorColorRC", this);
+	//act = new QAction(tr("&Cursor Row/Column Color"), this);
 	//act->setShortcuts(QKeySequence::Open);
-	act->setStatusTip(tr("Cursor Row/Column Color"));
-	connect(act, SIGNAL(triggered(void)), this, SLOT(pickCursorRowColumnColor(void)) );
+	//act->setStatusTip(tr("Cursor Row/Column Color"));
+	//connect(act, SIGNAL(triggered(void)), this, SLOT(pickCursorRowColumnColor(void)) );
 	
-	colorMenu->addAction(act);
+	colorMenu->addAction(actRowColColor);
 
 	// Color -> Alternate Column Color
-	act = new QAction(tr("&Alternate Column Color"), this);
+	actAltColColor = new ColorMenuItem( tr("&Alternate Column Color"), "SDL.HexEditAltColColor", this);
+	//act = new QAction(tr("&Alternate Column Color"), this);
 	//act->setShortcuts(QKeySequence::Open);
-	act->setStatusTip(tr("Alternate Column Color"));
-	connect(act, SIGNAL(triggered(void)), this, SLOT(pickAlternateColumnColor(void)) );
+	//act->setStatusTip(tr("Alternate Column Color"));
+	//connect(act, SIGNAL(triggered(void)), this, SLOT(pickAlternateColumnColor(void)) );
 	
-	colorMenu->addAction(act);
+	colorMenu->addAction(actAltColColor);
 
 	// Bookmarks Menu
 	bookmarkMenu = menuBar->addMenu(tr("&Bookmarks"));
@@ -1385,10 +1415,6 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	//-----------------------------------------------------------------------
 	//mainLayout = new QVBoxLayout();
 
-	grid   = new QGridLayout(this);
-	editor = new QHexEdit(this);
-	vbar   = new QScrollBar( Qt::Vertical, this );
-	hbar   = new QScrollBar( Qt::Horizontal, this );
 
 	grid->setMenuBar( menuBar );
 
@@ -1402,10 +1428,15 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 	hbar->setMinimum(0);
 	hbar->setMaximum(100);
 	vbar->setMinimum(0);
-	vbar->setMaximum( 0x10000 / 16 );
+	vbar->setMaximum( 0x1000 / 16 );
 
 	editor->setScrollBars( hbar, vbar );
 	
+	   actColorFG->connectColor( &editor->fgColor );
+	   actColorBG->connectColor( &editor->bgColor );
+	actRowColColor->connectColor( &editor->rowColHlgtColor );
+	actAltColColor->connectColor( &editor->altColHlgtColor );
+
 	//connect( vbar, SIGNAL(sliderMoved(int)), this, SLOT(vbarMoved(int)) );
 	connect( hbar, SIGNAL(valueChanged(int)), this, SLOT(hbarChanged(int)) );
 	connect( vbar, SIGNAL(valueChanged(int)), this, SLOT(vbarChanged(int)) );
@@ -1418,7 +1449,8 @@ HexEditorDialog_t::HexEditorDialog_t(QWidget *parent)
 
 	connect( periodicTimer, &QTimer::timeout, this, &HexEditorDialog_t::updatePeriodic );
 
-	periodicTimer->start( 100 ); // 10hz
+	//printf("Refresh Rate: %i\n", 1000 / refreshRateOpt );
+	periodicTimer->start( 1000 / refreshRateOpt  );
 
 	// Lock the mutex before adding a new window to the list,
 	// we want to be sure that the emulator is not iterating the list
@@ -1730,54 +1762,67 @@ void HexEditorDialog_t::changeFontRequest(void)
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::setViewRefresh5Hz(void)
 {
+	g_config->setOption("SDL.HexEditRefreshRate", 5);
 	periodicTimer->stop();
 	periodicTimer->start(200);
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::setViewRefresh10Hz(void)
 {
+	g_config->setOption("SDL.HexEditRefreshRate", 10);
 	periodicTimer->stop();
 	periodicTimer->start(100);
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::setViewRefresh20Hz(void)
 {
+	g_config->setOption("SDL.HexEditRefreshRate", 20);
 	periodicTimer->stop();
 	periodicTimer->start(50);
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::setViewRefresh30Hz(void)
 {
+	g_config->setOption("SDL.HexEditRefreshRate", 30);
 	periodicTimer->stop();
 	periodicTimer->start(33);
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::setViewRefresh60Hz(void)
 {
+	g_config->setOption("SDL.HexEditRefreshRate", 60);
 	periodicTimer->stop();
 	periodicTimer->start(16);
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::actvHighlightCB(bool enable)
 {
+	g_config->setOption("SDL.HexEditActivityHlgt", enable);
+
 	//printf("Highlight: %i \n", enable );
 	editor->setHighlightActivity( enable );
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::actvHighlightRVCB(bool enable)
 {
+	g_config->setOption("SDL.HexEditReverseVideo", enable);
+
 	//printf("Highlight: %i \n", enable );
 	editor->setHighlightReverseVideo( enable );
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::rolColHlgtChanged(bool enable)
 {
+	g_config->setOption("SDL.HexEditRowColumnHlgt", enable);
+
 	//printf("Highlight: %i \n", enable );
 	editor->setRowColHlgtEna( enable );
 }
 //----------------------------------------------------------------------------
 void HexEditorDialog_t::altColHlgtChanged(bool enable)
 {
+	g_config->setOption("SDL.HexEditAltnColumnColor", enable);
+
 	//printf("Highlight: %i \n", enable );
 	editor->setAltColHlgtEna( enable );
 }
@@ -2175,11 +2220,18 @@ void QHexEdit::resizeEvent(QResizeEvent *event)
 	if ( viewWidth >= pxLineWidth )
 	{
 		pxLineXScroll = 0;
+		hbar->setMaximum(0);
+		hbar->hide();
 	}
 	else
 	{
-		pxLineXScroll = (int)(0.010f * (float)hbar->value() * (float)(pxLineWidth - viewWidth) );
+		hbar->setPageStep(viewWidth);
+		hbar->setMaximum(pxLineWidth - viewWidth);
+		hbar->show();
+		pxLineXScroll = hbar->value();
 	}
+	vbar->setMaximum( maxLineOffset );
+	vbar->setPageStep( (3*viewLines)/4 );
 
 }
 //----------------------------------------------------------------------------
@@ -3646,7 +3698,9 @@ void QHexEdit::memModeUpdate(void)
 		}
 		maxLineOffset = mb.numLines() - viewLines + 1;
 
-		vbar->setMaximum( memSize / 16 );
+		//vbar->setMaximum( memSize / 16 );
+		vbar->setMaximum( maxLineOffset );
+		vbar->setPageStep( (3*viewLines)/4 );
 	}
 }
 //----------------------------------------------------------------------------
@@ -3655,6 +3709,7 @@ void QHexEdit::paintEvent(QPaintEvent *event)
 	int x, y, w, h, row, col, nrow, addr;
 	int c, cx, cy, ca, l, recty;
 	int pxCharWidth3;
+	int colHlgtStart = -1, colHlgtEnd = -1;
 	char txt[32];
        	QString asciiTxt;
 	QPainter painter(this);
@@ -3767,6 +3822,8 @@ void QHexEdit::paintEvent(QPaintEvent *event)
 
 	for ( row=0; row < nrow; row++)
 	{
+		colHlgtStart = -1; colHlgtEnd = -1;
+
 		l = lineOffset + row;
 		x = pxXoffset - pxLineXScroll;
 
@@ -3785,19 +3842,23 @@ void QHexEdit::paintEvent(QPaintEvent *event)
 			if ( l == txtHlgtStartLine )
 			{
 				hlgtXs = txtHlgtStartChar*3;
+				colHlgtStart = txtHlgtStartChar;
 			}
 			else
 			{
 				hlgtXs = 0;
+				colHlgtStart = 0;
 			}
 
 			if ( l == txtHlgtEndLine )
 			{
 				hlgtXe = (txtHlgtEndChar+1)*3;
+				colHlgtEnd = txtHlgtEndChar+1;
 			}
 			else
 			{
 				hlgtXe = 16*3;
+				colHlgtEnd = 16;
 			}
 			hlgtXd = hlgtXe - hlgtXs;
 
@@ -3885,7 +3946,12 @@ void QHexEdit::paintEvent(QPaintEvent *event)
 				} 
 				else
 				{
-					if ( viewMode == MODE_NES_ROM )
+					if ( txtHlgtSet && (col >= colHlgtStart) && (col < colHlgtEnd) )
+					{
+						// Background is already colored by highlight
+						painter.setPen( fgColor );
+					}
+					else if ( viewMode == MODE_NES_ROM )
 					{
 						QColor romBgColor, romFgColor;
 					  

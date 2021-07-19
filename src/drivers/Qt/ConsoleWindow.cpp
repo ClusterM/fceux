@@ -122,6 +122,7 @@ consoleWin_t::consoleWin_t(QWidget *parent)
 	mainMenuPauseWhenActv = false;
 
 	g_config->getOption( "SDL.PauseOnMainMenuAccess", &mainMenuPauseWhenActv );
+	g_config->getOption( "SDL.ContextMenuEnable", &contextMenuEnable );
 	g_config->getOption ("SDL.VideoDriver", &use_SDL_video);
 
 	if ( use_SDL_video )
@@ -498,6 +499,11 @@ void consoleWin_t::setMenuAccessPauseEnable( bool enable )
 	mainMenuPauseWhenActv = enable;
 }
 
+void consoleWin_t::setContextMenuEnable( bool enable )
+{
+	contextMenuEnable = enable;
+}
+
 void consoleWin_t::loadCursor(void)
 {
 	int cursorVis;
@@ -691,6 +697,47 @@ void consoleWin_t::showEvent(QShowEvent *event)
 	initScreenHandler();
 }
 
+void consoleWin_t::contextMenuEvent(QContextMenuEvent *event)
+{
+	QAction *act;
+	QMenu menu(this);
+
+	if ( !contextMenuEnable )
+	{
+		return;
+	}
+
+	act = new QAction(tr("Open ROM"), &menu);
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openROMFile(void)) );
+
+	menu.addAction( act );
+
+	act = new QAction(tr("Last ROM Used"), &menu);
+	act->setEnabled( romList.size() > 0 );
+	connect( act, SIGNAL(triggered(void)), this, SLOT(loadMostRecentROM(void)) );
+
+	menu.addAction( act );
+
+	menu.addSeparator();
+
+	act = new QAction(tr("Online Help"), &menu);
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openOnlineDocs(void)) );
+
+	menu.addAction( act );
+
+	menu.addSeparator();
+
+	act = new QAction(tr("Disable Context Menu via Options -> GUI Config"), &menu);
+	connect( act, SIGNAL(triggered(void)), this, SLOT(openGuiConfWin(void)) );
+
+	menu.addAction( act );
+
+	menu.addSeparator();
+
+	menu.exec(event->globalPos());
+
+	event->accept();
+}
 //---------------------------------------------------------------------------
 void consoleWin_t::initHotKeys(void)
 {
@@ -765,9 +812,17 @@ void consoleWin_t::createMainMenu(void)
 
 	menubar->setNativeMenuBar( useNativeMenuBar ? true : false );
 
+	// Top Level Menu Iterms
+	fileMenu  = menubar->addMenu(tr("&File"));
+	movieMenu = menubar->addMenu(tr("&Movie"));
+	optMenu   = menubar->addMenu(tr("&Options"));
+	emuMenu   = menubar->addMenu(tr("&Emulation"));
+	toolsMenu = menubar->addMenu(tr("&Tools"));
+	debugMenu = menubar->addMenu(tr("&Debug"));
+	helpMenu  = menubar->addMenu(tr("&Help"));
+
 	//-----------------------------------------------------------------------
 	// File
-	fileMenu = menubar->addMenu(tr("&File"));
 	
 	connect( fileMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( fileMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -955,7 +1010,6 @@ void consoleWin_t::createMainMenu(void)
 
 	//-----------------------------------------------------------------------
 	// Options
-	optMenu = menubar->addMenu(tr("&Options"));
 
 	connect( optMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( optMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -1079,7 +1133,6 @@ void consoleWin_t::createMainMenu(void)
 
 	//-----------------------------------------------------------------------
 	// Emulation
-	emuMenu = menubar->addMenu(tr("&Emulation"));
 
 	connect( emuMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( emuMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -1403,7 +1456,6 @@ void consoleWin_t::createMainMenu(void)
 
 	//-----------------------------------------------------------------------
 	// Tools
-	toolsMenu = menubar->addMenu(tr("&Tools"));
 
 	connect( toolsMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( toolsMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -1453,7 +1505,6 @@ void consoleWin_t::createMainMenu(void)
 
 	 //-----------------------------------------------------------------------
 	 // Debug
-	debugMenu = menubar->addMenu(tr("&Debug"));
 
 	connect( debugMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( debugMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -1532,7 +1583,6 @@ void consoleWin_t::createMainMenu(void)
 
 	//-----------------------------------------------------------------------
 	// Movie
-	movieMenu = menubar->addMenu(tr("&Movie"));
 
 	connect( movieMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( movieMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -1713,7 +1763,6 @@ void consoleWin_t::createMainMenu(void)
 
 	//-----------------------------------------------------------------------
 	// Help
-	helpMenu = menubar->addMenu(tr("&Help"));
  
 	connect( helpMenu, SIGNAL(aboutToShow(void)), this, SLOT(mainMenuOpen(void)) );
 	connect( helpMenu, SIGNAL(aboutToHide(void)), this, SLOT(mainMenuClose(void)) );
@@ -3911,6 +3960,18 @@ void consoleWin_t::syncActionConfig( QAction *act, const char *property )
 
 		act->setChecked( enable ? true : false );
 	}
+}
+
+void consoleWin_t::loadMostRecentROM(void)
+{
+	if ( romList.size() <= 0 )
+	{
+		return;
+	}
+	fceuWrapperLock();
+	CloseGame ();
+	LoadGame ( (romList.back())->c_str() );
+	fceuWrapperUnLock();
 }
 
 void consoleWin_t::updatePeriodic(void)

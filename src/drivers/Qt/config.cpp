@@ -568,6 +568,11 @@ InitConfig()
 	config->addOption("SDL.HexEditCursorColorRC", "#000080");
 	config->addOption("SDL.HexEditAltColColor"  , "#545454");
 	config->addOption("SDL.HexEditFont"  , "");
+	config->addOption("SDL.HexEditActivityHlgt", true);
+	config->addOption("SDL.HexEditReverseVideo", true);
+	config->addOption("SDL.HexEditRowColumnHlgt", false);
+	config->addOption("SDL.HexEditAltnColumnColor", false);
+	config->addOption("SDL.HexEditRefreshRate", 10);
     
 	// Debugger Options
 	config->addOption("autoLoadDebugFiles"     , "SDL.AutoLoadDebugFiles", 1);
@@ -657,6 +662,7 @@ InitConfig()
 	config->addOption("_useNativeFileDialog", "SDL.UseNativeFileDialog", false);
 	config->addOption("_useNativeMenuBar"   , "SDL.UseNativeMenuBar", false);
 	config->addOption("SDL.PauseOnMainMenuAccess", false);
+	config->addOption("SDL.ContextMenuEnable", true);
 	config->addOption("SDL.GuiStyle", "");
 	config->addOption("SDL.QtStyleSheet", "");
 	config->addOption("SDL.QPaletteFile", "");
